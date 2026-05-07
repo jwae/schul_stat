@@ -1,0 +1,50 @@
+<section class="app-management">
+  <div class="app-management-header">
+    <div>
+      <p class="app-management-eyebrow">Dashboard-Verwaltung</p>
+      <h2>App-Verwaltung</h2>
+      <p class="app-management-intro">
+        Verwalte Benutzer, Gruppen und Schulen mit dem aktuell angemeldeten Admin-Konto.
+      </p>
+    </div>
+
+    <div class="app-management-side">
+      <div v-if="managementUserLabel || connectionLabel || connectedDatabase" class="app-management-session header-auth-panel">
+        <div class="header-auth-summary">
+          <div class="header-auth-topline">
+            <p v-if="managementUserLabel" class="header-auth-user">User {{ managementUserLabel }}</p>
+            <button
+              v-if="showCloseButton"
+              class="app-management-close btn-secondary"
+              type="button"
+              @click="emit('close')"
+            >
+              {{ closeLabel }}
+            </button>
+          </div>
+          <div class="header-auth-meta">
+            <span v-if="connectionLabel" class="header-auth-badge">
+              <i class="bi bi-hdd-network"></i>
+              {{ connectionLabel }}
+            </span>
+            <span v-if="connectedDatabase" class="header-auth-badge">
+              <i class="bi bi-database"></i>
+              {{ connectedDatabase }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="!isAdminUser" class="app-management-empty">
+    Diese Verwaltung ist nur fuer Admin-Konten verfuegbar.
+  </div>
+
+  <UserManagementPanel
+    v-else
+    :management-token="token"
+    :management-user="user"
+    :embedded="true"
+  />
+</section>

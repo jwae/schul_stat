@@ -1,0 +1,174 @@
+<section class="snapshot-management-page">
+  <div v-if="!isManagementSessionActive" class="user-management-empty">
+    <p>Fuer Snapshot-Erstellung bitte zuerst die Verwaltung laden.</p>
+  </div>
+
+  <template v-else>
+    <section class="user-management-list-card snapshot-management-filter-card">
+      <div class="user-management-panel-head">
+        <div>
+          <h3>Snapshot erstellen</h3>
+          <p>Für alle Schulen aus der Liste werden die Statistikdaten abgerufen.</p>
+        </div>
+        <div class="snapshot-management-info-card">
+          <span class="snapshot-management-info-label">Akt. Schuljahr</span>
+          <strong class="snapshot-management-info-value">{{ currentSchoolYearLabel }}</strong>
+        </div>
+      </div>
+      <div class="snapshot-management-filter-row">
+        <label class="snapshot-management-field snapshot-management-field-compact">
+          <span>Schuljahr</span>
+          <select v-model="selectedTermLabel">
+            <option value="" disabled>Schuljahr waehlen</option>
+            <option v-for="label in termLabelOptions" :key="`snapshot-term-label-${label}`" :value="label">
+              {{ label }}
+            </option>
+          </select>
+        </label>
+        <label class="snapshot-management-field snapshot-management-field-compact">
+          <span>Datum</span>
+          <input v-model="snapshotDate" type="date" />
+        </label>
+        <label class="snapshot-management-field">
+          <span>Info</span>
+          <input v-model="snapshotInfo" type="text" placeholder="optionale Beschreibung" />
+        </label>
+        <button
+          class="btn-primary snapshot-management-primary-action"
+          type="button"
+          @click="handleSnapshotCreateAll"
+          :disabled="managementSaving || !selectedTermLabel || !snapshotDate"
+        >
+          Snapshot erstellen
+        </button>
+        <button
+          class="btn-secondary snapshot-management-primary-action"
+          type="button"
+          @click="handleSnapshotFetchData"
+          :disabled="managementSaving || !selectedTermLabel || !snapshotDate"
+        >
+          Daten holen
+        </button>
+      </div>
+    </section>
+
+    <section class="user-management-list-card snapshot-management-table-card">
+      <div class="user-management-panel-head">
+        <div>
+          <h3>Verfuegbare Schulen</h3>
+          <p>
+            {{ sortedSchoolSources.length }} Schule{{ sortedSchoolSources.length === 1 ? "" : "n" }} mit Snapshot-Quelle.
+          </p>
+        </div>
+        <button
+          class="btn-secondary snapshot-management-table-head-action"
+          type="button"
+          @click="handleConnectionTestAll"
+          :disabled="managementSaving"
+        >
+          Verbindungen testen
+        </button>
+      </div>
+
+      <div class="snapshot-management-table-wrap">
+        <table class="snapshot-management-table">
+          <thead>
+            <tr>
+              <th>Nr.</th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('snr')">SNR{{ sortIndicator("snr") }}</button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('school_name')">Schule{{ sortIndicator("school_name") }}</button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('city')">Ort{{ sortIndicator("city") }}</button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('db_host')">Host{{ sortIndicator("db_host") }}</button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('db_name')">DB-Name{{ sortIndicator("db_name") }}</button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('db_user')">DB-User{{ sortIndicator("db_user") }}</button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('last_import_at')">Letzter Import{{ sortIndicator("last_import_at") }}</button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('is_active')">Status{{ sortIndicator("is_active") }}</button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('last_test_at')">Letzter Test{{ sortIndicator("last_test_at") }}</button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('server_status')">Online{{ sortIndicator("server_status") }}</button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('db_status')">DB{{ sortIndicator("db_status") }}</button></th>
+              <th>Aktionen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(source, index) in sortedSchoolSources" :key="`snapshot-create-school-${source.source_id}`">
+              <td>{{ index + 1 }}</td>
+              <td>{{ source.snr || "-" }}</td>
+              <td class="snapshot-management-name" :title="source.school_name || 'Ohne Name'">{{ source.school_name || "-" }}</td>
+              <td>{{ source.city || "-" }}</td>
+              <td :title="source.db_host || '-'">{{ source.db_host || "-" }}</td>
+              <td :title="source.db_name || '-'">{{ source.db_name || "-" }}</td>
+              <td :title="source.db_user || '-'">{{ source.db_user || "-" }}</td>
+              <td>{{ formatDateTime(source.last_import_at) }}</td>
+              <td>
+                <span class="snapshot-management-state" :class="{ 'is-inactive': !source.is_active }">
+                  {{ statusLabel(source.is_active) }}
+                </span>
+              </td>
+              <td>{{ formatDateTime(source.last_test_at) }}</td>
+              <td>
+                <span
+                  class="snapshot-status-dot"
+                  :class="statusDotClass(getServerStatus(source))"
+                  :title="statusDotLabel(getServerStatus(source), 'Online')"
+                  :aria-label="statusDotLabel(getServerStatus(source), 'Online')"
+                ></span>
+              </td>
+              <td>
+                <span
+                  class="snapshot-status-dot"
+                  :class="statusDotClass(getDatabaseStatus(source))"
+                  :title="statusDotLabel(getDatabaseStatus(source), 'Datenbank')"
+                  :aria-label="statusDotLabel(getDatabaseStatus(source), 'Datenbank')"
+                ></span>
+              </td>
+              <td>
+                <div class="snapshot-management-actions">
+                  <button
+                    class="btn-secondary"
+                    type="button"
+                    @click="handleConnectionTest(source)"
+                    :disabled="managementSaving || !source.is_active"
+                  >
+                    Test
+                  </button>
+                  <button
+                    class="btn-secondary"
+                    type="button"
+                    @click="handleClassesInfo(source)"
+                    :disabled="managementSaving || !source.is_active"
+                  >
+                    Info
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!sortedSchoolSources.length">
+              <td colspan="13" class="snapshot-management-table-empty">
+                Keine Schulen mit Eintraegen in <code>school_source_db</code> vorhanden.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div v-if="infoDialogOpen" class="snapshot-info-overlay" @click.self="closeInfoDialog">
+      <section class="snapshot-info-dialog" role="dialog" aria-modal="true" :aria-label="infoDialogTitle">
+        <div class="snapshot-info-head">
+          <h3>{{ infoDialogTitle }}</h3>
+          <button class="btn-secondary snapshot-info-close" type="button" @click="closeInfoDialog">
+            Schliessen
+          </button>
+        </div>
+        <pre class="snapshot-info-body">{{ infoDialogBody }}</pre>
+      </section>
+    </div>
+    <div v-if="managementSaving" class="snapshot-loading-overlay" role="status" aria-live="polite" aria-modal="true">
+      <section class="snapshot-loading-dialog" aria-label="Vorgang laeuft">
+        <span class="snapshot-loading-spinner" aria-hidden="true"></span>
+        <strong>Bitte warten</strong>
+        <p>{{ currentActionLabel || "Vorgang laeuft..." }}</p>
+      </section>
+    </div>
+  </template>
+</section>

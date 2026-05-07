@@ -1,0 +1,454 @@
+<section class="school-management-page">
+  <div v-if="!isManagementSessionActive" class="user-management-empty school-management-empty">
+    <p>Fuer Daten laden, Aendern, Loeschen und Aktivieren bitte zuerst die Verwaltung laden.</p>
+  </div>
+
+  <template v-else>
+    <section class="user-management-panel school-management-form-card">
+      <div class="user-management-panel-head">
+        <div class="school-management-form-title-block">
+          <h3>{{ selectedManagementSchoolSourceId ? "Schulserver-Quelle aendern" : "Neue Schulserver-Quelle" }}</h3>
+          <p>Pro Schule wird genau eine Quelle fuer den Snapshot-Abruf gepflegt.</p>
+        </div>
+        <div class="school-management-form-actions">
+          <button
+            class="btn-secondary school-management-table-head-action school-management-help-button"
+            type="button"
+            @click="openHelpOverlay"
+          >
+            ? Hilfe
+          </button>
+          <button
+            v-if="selectedManagementSchoolSourceId"
+            class="btn-secondary"
+            type="button"
+            @click="resetSchoolSourceForm"
+            :disabled="managementSaving"
+          >
+            Neue Schule
+          </button>
+        </div>
+      </div>
+
+      <div class="user-management-form-grid school-management-form-grid">
+        <label class="field-block">
+          <span class="field-label">Schule</span>
+          <div class="school-management-school-picker">
+            <button
+              class="school-management-school-select"
+              type="button"
+              @click="openSchoolSelectionModal"
+              :disabled="managementSaving"
+            >
+              <span v-if="selectedSchoolForSource">
+                {{ selectedSchoolForSource.snr }} - {{ selectedSchoolForSource.name || "Ohne Name" }}
+              </span>
+              <span v-else>Schule waehlen</span>
+            </button>
+          </div>
+        </label>
+
+        <label class="field-block">
+          <span class="field-label">Server</span>
+          <input v-model="schoolSourceForm.db_host" :disabled="managementSaving" />
+        </label>
+
+        <label class="field-block">
+          <span class="field-label">Port</span>
+          <input
+            v-model.number="schoolSourceForm.db_port"
+            type="number"
+            min="1"
+            max="65535"
+            :disabled="managementSaving"
+          />
+        </label>
+
+        <label class="field-block">
+          <span class="field-label">Datenbank</span>
+          <input v-model="schoolSourceForm.db_name" :disabled="managementSaving" />
+        </label>
+
+        <label class="field-block">
+          <span class="field-label">DB-Benutzer</span>
+          <input v-model="schoolSourceForm.db_user" :disabled="managementSaving" />
+        </label>
+
+        <label class="field-block">
+          <span class="field-label">{{ selectedManagementSchoolSourceId ? "Neues Passwort (optional)" : "Passwort" }}</span>
+          <input v-model="schoolSourceForm.db_password_enc" type="password" :disabled="managementSaving" />
+        </label>
+      </div>
+
+      <label class="user-management-checkbox">
+        <input v-model="schoolSourceForm.is_active" type="checkbox" :disabled="managementSaving" />
+        <span>Quelle aktiv</span>
+      </label>
+
+      <div class="user-management-inline-actions">
+        <button class="btn-primary" type="button" @click="saveManagementSchoolSource" :disabled="managementSaving">
+          {{ managementSaving ? "Speichere..." : (selectedManagementSchoolSourceId ? "Aenderungen speichern" : "Schule hinzufuegen") }}
+        </button>
+        <button
+          class="btn-secondary"
+          type="button"
+          @click="testManagementSchoolSource"
+          :disabled="managementSaving || !canTestSchoolSource"
+        >
+          Zugangsdaten pruefen
+        </button>
+      </div>
+
+      <transition name="feedback-fade" mode="out-in">
+        <div
+          v-if="localFeedbackError"
+          class="feedback-panel feedback-panel-error user-management-inline-feedback"
+        >
+          <p class="error">{{ localFeedbackError }}</p>
+        </div>
+        <div
+          v-else-if="localFeedbackNotice"
+          class="feedback-panel feedback-panel-success user-management-inline-feedback"
+        >
+          <p>{{ localFeedbackNotice }}</p>
+        </div>
+      </transition>
+    </section>
+
+    <section class="user-management-list-card school-management-table-card">
+      <div class="user-management-panel-head">
+        <div>
+          <h3>Alle Dashboard-Schulen</h3>
+          <p>Mit SNR, gekuerztem Schulnamen, Ort, Host und Status.</p>
+        </div>
+        <div class="school-management-table-head-actions">
+          <input
+            ref="schoolImportInput"
+            type="file"
+            accept=".csv,text/csv"
+            class="school-management-import-input"
+            @change="handleSchoolImportFileSelected"
+          />
+          <button
+            class="btn-secondary school-management-table-head-action"
+            type="button"
+            @click="openSchoolImportPicker"
+            :disabled="managementSaving"
+          >
+            Serverliste importieren
+          </button>
+          <button
+            class="btn-secondary school-management-table-head-action"
+            type="button"
+            @click="testAllManagementSchoolSources"
+            :disabled="managementSaving"
+          >
+            Verbindungen testen
+          </button>
+          <button
+            class="btn-secondary school-management-table-head-action school-management-delete-all"
+            type="button"
+            @click="deleteAllManagementSchoolSources"
+            :disabled="managementSaving || !managementSchoolSources.length"
+          >
+            Alle Schulen loeschen
+          </button>
+        </div>
+      </div>
+
+      <div class="school-management-table-wrap">
+        <table class="school-management-table">
+          <thead>
+            <tr>
+              <th>Nr.</th>
+              <th><button class="school-management-sort" type="button" @click="toggleSort('snr')">SNR <span v-if="sortIndicatorBadge('snr')" class="school-management-sort-indicator">{{ sortIndicatorBadge("snr") }}</span></button></th>
+              <th><button class="school-management-sort" type="button" @click="toggleSort('school_name')">Schulname <span v-if="sortIndicatorBadge('school_name')" class="school-management-sort-indicator">{{ sortIndicatorBadge("school_name") }}</span></button></th>
+              <th><button class="school-management-sort" type="button" @click="toggleSort('city')">Ort <span v-if="sortIndicatorBadge('city')" class="school-management-sort-indicator">{{ sortIndicatorBadge("city") }}</span></button></th>
+              <th><button class="school-management-sort" type="button" @click="toggleSort('school_form_sf')">SF <span v-if="sortIndicatorBadge('school_form_sf')" class="school-management-sort-indicator">{{ sortIndicatorBadge("school_form_sf") }}</span></button></th>
+              <th><button class="school-management-sort" type="button" @click="toggleSort('db_host')">Host <span v-if="sortIndicatorBadge('db_host')" class="school-management-sort-indicator">{{ sortIndicatorBadge("db_host") }}</span></button></th>
+              <th><button class="school-management-sort" type="button" @click="toggleSort('db_port')">Port <span v-if="sortIndicatorBadge('db_port')" class="school-management-sort-indicator">{{ sortIndicatorBadge("db_port") }}</span></button></th>
+              <th><button class="school-management-sort" type="button" @click="toggleSort('db_name')">Datenbank <span v-if="sortIndicatorBadge('db_name')" class="school-management-sort-indicator">{{ sortIndicatorBadge("db_name") }}</span></button></th>
+              <th><button class="school-management-sort" type="button" @click="toggleSort('db_user')">DB-Benutzer <span v-if="sortIndicatorBadge('db_user')" class="school-management-sort-indicator">{{ sortIndicatorBadge("db_user") }}</span></button></th>
+              <th><button class="school-management-sort" type="button" @click="toggleSort('is_active')">Status <span v-if="sortIndicatorBadge('is_active')" class="school-management-sort-indicator">{{ sortIndicatorBadge("is_active") }}</span></button></th>
+              <th><button class="school-management-sort" type="button" @click="toggleSort('server_status')">Online <span v-if="sortIndicatorBadge('server_status')" class="school-management-sort-indicator">{{ sortIndicatorBadge("server_status") }}</span></button></th>
+              <th><button class="school-management-sort" type="button" @click="toggleSort('db_status')">DB <span v-if="sortIndicatorBadge('db_status')" class="school-management-sort-indicator">{{ sortIndicatorBadge("db_status") }}</span></button></th>
+              <th>Aktionen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(source, index) in sortedManagementSchoolSources"
+              :key="`table-school-source-${source.source_id}`"
+              :class="{ 'school-management-row-active': source.is_active }"
+            >
+              <td>{{ index + 1 }}</td>
+              <td>{{ source.snr }}</td>
+              <td class="school-management-name" :title="source.school_name || 'Ohne Name'">{{ formatSchoolSourceName(source.school_name) }}</td>
+              <td>{{ source.city || "-" }}</td>
+              <td>{{ source.school_form_sf || "-" }}</td>
+              <td>{{ source.db_host }}</td>
+              <td>{{ source.db_port }}</td>
+              <td>{{ source.db_name }}</td>
+              <td>{{ source.db_user }}</td>
+              <td>
+                <span class="user-management-state" :class="{ 'is-inactive': !source.is_active }">
+                  {{ source.is_active ? "aktiv" : "inaktiv" }}
+                </span>
+              </td>
+              <td>
+                <span
+                  class="school-status-dot"
+                  :class="statusDotClass(getServerStatus(source))"
+                  :title="statusDotLabel(getServerStatus(source), 'Online')"
+                  :aria-label="statusDotLabel(getServerStatus(source), 'Online')"
+                ></span>
+              </td>
+              <td>
+                <span
+                  class="school-status-dot"
+                  :class="statusDotClass(getDatabaseStatus(source))"
+                  :title="statusDotLabel(getDatabaseStatus(source), 'Datenbank')"
+                  :aria-label="statusDotLabel(getDatabaseStatus(source), 'Datenbank')"
+                ></span>
+              </td>
+              <td>
+                <div class="school-management-actions">
+                  <button
+                    class="btn-secondary"
+                    type="button"
+                    @click="editManagementSchoolSource(source.source_id)"
+                    :disabled="managementSaving"
+                    title="Schule aendern"
+                    aria-label="Schule aendern"
+                  >
+                    <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                  </button>
+                  <button
+                    class="btn-secondary"
+                    type="button"
+                    @click="deleteManagementSchoolSource(source)"
+                    :disabled="managementSaving"
+                    title="Schule loeschen"
+                    aria-label="Schule loeschen"
+                  >
+                    <i class="bi bi-trash" aria-hidden="true"></i>
+                  </button>
+                  <button class="btn-secondary" type="button" @click="toggleManagementSchoolSourceActive(source)" :disabled="managementSaving">
+                    {{ source.is_active ? "Deaktivieren" : "Aktivieren" }}
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!sortedManagementSchoolSources.length">
+              <td colspan="13" class="school-management-table-empty">
+                Noch keine Dashboard-Schulen angelegt.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div
+      v-if="schoolSelectionModalOpen"
+      class="school-management-modal-overlay"
+      @click.self="closeSchoolSelectionModal"
+    >
+      <section class="school-management-modal" role="dialog" aria-modal="true" aria-label="Schule auswaehlen">
+        <div class="school-management-modal-head">
+          <div>
+            <h3>Schule auswaehlen</h3>
+            <p>Filter auf SNR, Schulname und Ort. Auswahl mit Klick auf eine Zeile.</p>
+          </div>
+          <button class="btn-secondary" type="button" @click="closeSchoolSelectionModal">
+            Schliessen
+          </button>
+        </div>
+
+        <div class="school-management-modal-filters">
+          <label class="field-block">
+            <span class="field-label">SNR</span>
+            <input v-model="schoolSelectionFilters.snr" type="text" placeholder="z. B. 123456" />
+          </label>
+          <label class="field-block">
+            <span class="field-label">Name</span>
+            <input v-model="schoolSelectionFilters.name" type="text" placeholder="Schulname filtern" />
+          </label>
+          <label class="field-block">
+            <span class="field-label">Ort</span>
+            <input v-model="schoolSelectionFilters.city" type="text" placeholder="Ort filtern" />
+          </label>
+        </div>
+
+        <div class="school-management-modal-list">
+          <table v-if="filteredAvailableSchoolsForSource.length" class="school-management-modal-table">
+            <thead>
+              <tr>
+                <th>SNR</th>
+                <th>Schulname</th>
+                <th>Ort</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="school in filteredAvailableSchoolsForSource"
+                :key="`school-modal-option-${school.snr}`"
+                class="school-management-modal-row"
+                @click="selectSchoolForSource(school)"
+              >
+                <td>{{ school.snr }}</td>
+                <td class="school-management-modal-school-name" :title="school.name || 'Ohne Name'">
+                  {{ school.name || "Ohne Name" }}
+                </td>
+                <td>{{ school.city || "-" }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-else class="school-management-modal-empty">
+            Keine passende Schule gefunden.
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <div
+      v-if="schoolImportPreviewModalOpen"
+      class="school-management-modal-overlay"
+      @click.self="cancelSchoolImport"
+    >
+      <section class="school-management-modal school-management-import-preview-modal" role="dialog" aria-modal="true" aria-label="CSV-Vorschau">
+        <div class="school-management-modal-head">
+          <div>
+            <h3>CSV-Vorschau (Schulserver-Quellen)</h3>
+            <p>Die Datei <strong>{{ schoolImportFileName }}</strong> enthaelt {{ schoolImportPreviewData.length }} gueltige Zeile(n).</p>
+          </div>
+          <button class="btn-secondary" type="button" @click="cancelSchoolImport" :disabled="managementSaving">
+            Schliessen
+          </button>
+        </div>
+
+        <div class="school-management-import-preview-options">
+          <label
+            class="school-management-import-overwrite-toggle"
+            :title="schoolImportOverwriteExisting
+              ? 'Ein = Importiere alle Schulen mit Haekchen und ueberschreibe vorhandene'
+              : 'Aus = Importiere nur neue Schulen mit Haekchen'"
+          >
+            <input
+              v-model="schoolImportOverwriteExisting"
+              type="checkbox"
+              class="school-management-import-overwrite-toggle-input"
+              :disabled="managementSaving"
+            />
+            <span class="school-management-import-overwrite-toggle-switch" aria-hidden="true"></span>
+            <span class="school-management-import-overwrite-toggle-label">Daten ueberschreiben</span>
+          </label>
+        </div>
+
+        <div class="school-management-modal-list">
+          <table class="school-management-modal-table">
+            <thead>
+              <tr>
+                <th>
+                  <button
+                    class="school-management-import-select-all"
+                    type="button"
+                    @click="selectAllSchoolImportRows"
+                    :disabled="managementSaving"
+                  >
+                    Import
+                  </button>
+                </th>
+                <th>SNR</th>
+                <th>Schulname</th>
+                <th>Host</th>
+                <th>Port</th>
+                <th>Datenbank</th>
+                <th>User</th>
+                <th>Vorhanden</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in schoolImportPreviewData"
+                :key="`import-preview-${row.snr}`"
+                class="school-management-modal-row school-management-import-preview-row"
+              >
+                <td>
+                  <input v-model="row.selected" type="checkbox" :disabled="managementSaving" />
+                </td>
+                <td>{{ row.snr }}</td>
+                <td :title="row.school_name || '-'">{{ formatImportPreviewSchoolName(row.school_name) }}</td>
+                <td>{{ row.db_host || "-" }}</td>
+                <td>{{ row.db_port || "-" }}</td>
+                <td>{{ row.db_name || "-" }}</td>
+                <td>{{ row.db_user || "-" }}</td>
+                <td>
+                  <span class="user-management-state" :class="row.exists ? 'is-active' : 'is-inactive'">
+                    {{ row.exists ? 'Ja' : 'Neu' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="school-management-modal-filters" style="display: flex; justify-content: flex-end; gap: 0.5rem; padding: 1rem; border-top: 1px solid var(--border-color);">
+          <button class="btn-secondary" type="button" @click="cancelSchoolImport" :disabled="managementSaving">
+            Abbrechen
+          </button>
+          <button
+            class="btn-primary"
+            type="button"
+            @click="confirmSchoolImport"
+            :disabled="managementSaving || !schoolImportPreviewData.some((row) => row?.selected)"
+          >
+            Import starten
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <HelpOverlay
+      v-if="helpOverlayOpen"
+      title="Hilfe zu Schulen"
+      subtitle="Kurzer Ueberblick ueber die wichtigsten Funktionen."
+      :items="helpOverlayItems"
+      aria-label="Hilfe Schulen"
+      @close="closeHelpOverlay"
+    />
+
+    <div
+      v-if="importResultDialogOpen"
+      class="school-management-modal-overlay"
+      @click.self="closeImportResultDialog"
+    >
+      <section class="school-management-modal school-management-import-result-modal" role="dialog" aria-modal="true" :aria-label="importResultDialogTitle">
+        <div class="school-management-modal-head">
+          <div>
+            <h3>{{ importResultDialogTitle }}</h3>
+            <p>Ergebnis des CSV-Imports fuer Schulserver-Quellen.</p>
+          </div>
+          <button class="btn-secondary" type="button" @click="closeImportResultDialog">
+            Schliessen
+          </button>
+        </div>
+        <pre class="school-management-import-result-body">{{ importResultDialogBody }}</pre>
+      </section>
+    </div>
+
+    <div
+      v-if="loadingOverlayOpen"
+      class="school-management-loading-overlay"
+      role="status"
+      aria-live="polite"
+      aria-modal="true"
+    >
+      <section class="school-management-loading-dialog" aria-label="Verbindungstest laeuft">
+        <span class="school-management-loading-spinner" aria-hidden="true"></span>
+        <strong>Bitte warten...</strong>
+        <p>{{ currentActionLabel || "Vorgang laeuft..." }}</p>
+      </section>
+    </div>
+  </template>
+</section>

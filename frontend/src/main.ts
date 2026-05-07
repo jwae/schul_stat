@@ -1,0 +1,10 @@
+import { createApp } from "vue";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "bootstrap/dist/js/bootstrap.bundle.min.js";
+import App from "./App.vue";
+import { loadToken } from "./authStore";
+
+// Load stored authentication token
+loadToken();
+
+createApp(App).mount("#app");

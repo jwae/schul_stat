@@ -1,0 +1,480 @@
+  <section class="card user-management-card">
+    <div v-if="!embedded" class="user-management-card-header">
+      <div class="user-management-card-title">
+        <div>
+          <p class="eyebrow">Verwaltung</p>
+          <h2>Dashboard-User verwalten</h2>
+          <p class="user-management-intro">
+            Pflege Benutzerkonten, Gruppen und die Freigabe der Dashboards direkt in der App-Datenbank.
+          </p>
+        </div>
+
+        <div class="user-management-session" :class="{ 'user-management-session-active': isManagementSessionActive }">
+          <i :class="isManagementSessionActive ? 'bi bi-shield-check' : 'bi bi-shield-lock'"></i>
+          <span>{{ isManagementSessionActive ? managementSessionLabel : "Admin-Login erforderlich" }}</span>
+        </div>
+      </div>
+
+      <div v-if="isManagementSessionActive && !hasExternalManagementSession" class="user-management-toolbar">
+        <button
+          class="btn-secondary"
+          type="button"
+          @click="clearManagementSession"
+          :disabled="managementLoading || managementSaving"
+        >
+          Admin-Sitzung beenden
+        </button>
+      </div>
+    </div>
+
+    <transition name="feedback-fade" mode="out-in">
+      <div
+        v-if="managementError && (!isManagementSessionActive || activeManagementTab === 'schools' || activeManagementTab === 'snapshot-sj' || activeManagementTab === 'snapshots' || activeManagementTab === 'db-contents')"
+        class="feedback-panel feedback-panel-error"
+      >
+        <p class="error">{{ managementError }}</p>
+      </div>
+      <div
+        v-else-if="managementNotice && (!isManagementSessionActive || activeManagementTab === 'schools' || activeManagementTab === 'snapshot-sj' || activeManagementTab === 'snapshots' || activeManagementTab === 'db-contents')"
+        class="feedback-panel feedback-panel-success"
+      >
+        <p>{{ managementNotice }}</p>
+      </div>
+    </transition>
+
+    <div class="user-management-toolbar user-management-toolbar-primary">
+      <button
+        v-if="!hasExternalManagementSession"
+        class="btn-primary"
+        type="button"
+        @click="authenticateUserManagement"
+        :disabled="managementLoading || !canLoadUserManagement"
+      >
+        {{ managementLoading ? "Lade Verwaltung..." : "Verwaltung laden" }}
+      </button>
+    </div>
+
+    <div v-if="!isManagementSessionActive" class="user-management-empty">
+      <p>
+        <template v-if="hasExternalManagementSession">
+          Die Dashboard-Verwaltung ist nur mit einer aktiven Admin-Sitzung verfuegbar.
+        </template>
+        <template v-else>
+          Trage oben einen Admin-Benutzernamen und das Passwort ein und lade dann die Verwaltung.
+          Nur Mitglieder der Gruppe <code>admin</code> erhalten Zugriff.
+        </template>
+      </p>
+    </div>
+
+    <template v-if="isManagementSessionActive">
+      <div class="user-management-summary">
+          <article class="user-management-stat">
+            <span class="user-management-stat-label">Benutzer</span>
+            <strong>
+              {{ managementStats.total_users }}
+              <small>
+                {{ managementStats.active_users }} Aktiv{{ managementStats.total_users - managementStats.active_users === 1 ? "" : "e" }}
+                /
+                {{ managementStats.total_users - managementStats.active_users }} Inaktiv
+              </small>
+            </strong>
+          </article>
+          <article class="user-management-stat">
+            <span class="user-management-stat-label">Gruppen</span>
+            <strong>
+              {{ managementStats.total_groups }}
+              <small>
+                {{ managementStats.active_groups }} Aktiv{{ managementStats.total_groups - managementStats.active_groups === 1 ? "" : "e" }}
+                /
+                {{ managementStats.total_groups - managementStats.active_groups }} Inaktiv
+              </small>
+            </strong>
+          </article>
+          <article class="user-management-stat">
+            <span class="user-management-stat-label">Dashboards</span>
+            <strong>
+              {{ managementStats.total_dashboards }}
+              <small>aktiv in der App</small>
+            </strong>
+          </article>
+          <article class="user-management-stat">
+            <span class="user-management-stat-label">Schulserver</span>
+            <strong>
+              {{ managementStats.total_school_sources }}
+              <small>
+                {{ managementStats.active_school_sources }} Aktiv{{ managementStats.total_school_sources - managementStats.active_school_sources === 1 ? "" : "e" }}
+                /
+                {{ managementStats.total_school_sources - managementStats.active_school_sources }} Inaktiv
+              </small>
+            </strong>
+          </article>
+          <article class="user-management-stat">
+            <span class="user-management-stat-label">Snapshots</span>
+            <strong>
+              {{ managementStats.total_snapshots }}
+              <small>{{ managementStats.total_snapshot_schools }} Schule{{ managementStats.total_snapshot_schools === 1 ? "" : "n" }}</small>
+            </strong>
+          </article>
+      </div>
+
+      <div class="user-management-tabs" role="tablist" aria-label="Benutzerverwaltung Bereiche">
+        <button
+          class="user-management-tab"
+          :class="{ 'is-active': activeManagementTab === 'users' }"
+          type="button"
+          role="tab"
+          title="Benutzerkonten anlegen, bearbeiten, aktivieren und loeschen."
+          :aria-selected="activeManagementTab === 'users' ? 'true' : 'false'"
+          @click="activeManagementTab = 'users'"
+        >
+          <i class="bi bi-people" aria-hidden="true"></i>
+          <span>Benutzer</span>
+        </button>
+        <button
+          class="user-management-tab"
+          :class="{ 'is-active': activeManagementTab === 'groups' }"
+          type="button"
+          role="tab"
+          title="Gruppen und deren Dashboard-Berechtigungen verwalten."
+          :aria-selected="activeManagementTab === 'groups' ? 'true' : 'false'"
+          @click="activeManagementTab = 'groups'"
+        >
+          <i class="bi bi-collection" aria-hidden="true"></i>
+          <span>Gruppen</span>
+        </button>
+        <button
+          class="user-management-tab"
+          :class="{ 'is-active': activeManagementTab === 'schools' }"
+          type="button"
+          role="tab"
+          title="Schulserver-Quellen fuer die angebundenen Schulen pflegen."
+          :aria-selected="activeManagementTab === 'schools' ? 'true' : 'false'"
+          @click="activeManagementTab = 'schools'"
+        >
+          <i class="bi bi-building" aria-hidden="true"></i>
+          <span>Schulen</span>
+        </button>
+        <button
+          class="user-management-tab"
+          :class="{ 'is-active': activeManagementTab === 'snapshots' }"
+          type="button"
+          role="tab"
+          title="Vorhandene Snapshot-Staende anzeigen und loeschen."
+          :aria-selected="activeManagementTab === 'snapshots' ? 'true' : 'false'"
+          @click="activeManagementTab = 'snapshots'"
+        >
+          <i class="bi bi-calendar3" aria-hidden="true"></i>
+          <span>Snapshot verwalten</span>
+        </button>
+        <button
+          class="user-management-tab"
+          :class="{ 'is-active': activeManagementTab === 'snapshot-sj' }"
+          type="button"
+          role="tab"
+          title="Schuljahresbezogene Snapshots vorbereiten und importieren."
+          :aria-selected="activeManagementTab === 'snapshot-sj' ? 'true' : 'false'"
+          @click="activeManagementTab = 'snapshot-sj'"
+        >
+          <i class="bi bi-camera" aria-hidden="true"></i>
+          <span>Snapshots</span>
+        </button>
+        <button
+          class="user-management-tab"
+          :class="{ 'is-active': activeManagementTab === 'db-contents' }"
+          type="button"
+          role="tab"
+          title="Inhalte der Tabellen snapshot_student und snapshot_teacher anzeigen."
+          :aria-selected="activeManagementTab === 'db-contents' ? 'true' : 'false'"
+          @click="activeManagementTab = 'db-contents'"
+        >
+          <i class="bi bi-table" aria-hidden="true"></i>
+          <span>DB Inhalte</span>
+        </button>
+      </div>
+
+      <div v-if="activeManagementTab === 'users'" class="user-management-tab-panel" role="tabpanel">
+        <div class="user-management-grid user-management-grid-single">
+          <section class="user-management-panel">
+            <div class="user-management-panel-head">
+              <div>
+                <h3>Benutzerverwaltung</h3>
+              </div>
+              <button class="btn-secondary" type="button" @click="resetUserForm" :disabled="managementSaving">
+                Neuer Benutzer
+              </button>
+            </div>
+
+            <div class="user-management-form-grid user-management-user-form-grid">
+              <label class="field-block">
+                <span class="field-label">Loginname</span>
+                <input v-model="userForm.username" :disabled="managementSaving" />
+              </label>
+
+              <label class="field-block">
+                <span class="field-label">Name</span>
+                <input v-model="userForm.user_fullname" :disabled="managementSaving" />
+              </label>
+
+              <label class="field-block">
+                <span class="field-label">
+                  {{ selectedManagementUserId ? "Neues Passwort (optional)" : "Passwort" }}
+                </span>
+                <input
+                  v-model="userForm.password"
+                  type="password"
+                  :disabled="managementSaving"
+                />
+              </label>
+
+              <label class="field-block">
+                <span class="field-label">E-Mail</span>
+                <input v-model="userForm.email" :disabled="managementSaving" />
+              </label>
+
+              <label class="field-block">
+                <span class="field-label">Gruppe</span>
+                <select v-model="userForm.group_id" :disabled="managementSaving">
+                  <option value="" disabled>Gruppe waehlen</option>
+                  <option v-for="group in activeManagementGroups" :key="`group-option-${group.group_id}`" :value="String(group.group_id)">
+                    {{ group.group_name }}
+                  </option>
+                </select>
+              </label>
+
+              <div class="field-block user-management-checkbox-field">
+                <span class="field-label">Aktiv</span>
+                <label class="user-management-checkbox user-management-checkbox-card">
+                  <input
+                    v-model="userForm.is_active"
+                    type="checkbox"
+                    :disabled="managementSaving || isSelectedCurrentManagedUser"
+                  />
+                  <span>Benutzer aktiv</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="user-management-user-actions">
+              <button class="btn-primary" type="button" @click="saveManagementUser" :disabled="managementSaving">
+                {{ managementSaving ? "Speichere..." : (selectedManagementUserId ? "Benutzer aktualisieren" : "Benutzer anlegen") }}
+              </button>
+            </div>
+
+            <transition name="feedback-fade" mode="out-in">
+              <div
+                v-if="managementError"
+                class="feedback-panel feedback-panel-error user-management-inline-feedback"
+              >
+                <p class="error">{{ managementError }}</p>
+              </div>
+              <div
+                v-else-if="managementNotice"
+                class="feedback-panel feedback-panel-success user-management-inline-feedback"
+              >
+                <p>{{ managementNotice }}</p>
+              </div>
+            </transition>
+          </section>
+        </div>
+
+        <div class="user-management-lists user-management-lists-single">
+          <section class="user-management-list-card">
+            <div class="user-management-panel-head">
+              <div>
+                <h3>Benutzerübersicht</h3>
+              </div>
+            </div>
+            <div class="user-management-list user-management-user-list">
+              <article
+                v-for="user in managementUsers"
+                :key="`list-user-${user.user_id}`"
+                class="user-management-list-item user-management-user-card"
+                :class="{ 'is-admin-user': String(user.group_name || '').trim().toLowerCase() === 'admin' }"
+              >
+                <div class="user-management-list-row">
+                  <strong>{{ user.username }}</strong>
+                  <span class="user-management-state" :class="{ 'is-inactive': !user.is_active }">
+                    {{ user.is_active ? "Aktiv" : "Inaktiv" }}
+                  </span>
+                </div>
+                <p>{{ user.user_fullname || "Ohne Vollname" }}</p>
+                <small>{{ user.group_name }}{{ user.email ? ` - ${user.email}` : "" }}</small>
+                <div class="user-management-list-actions">
+                  <button class="btn-secondary" type="button" @click="editManagementUser(user.user_id)" :disabled="managementSaving">
+                    <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                  </button>
+                  <button
+                    v-if="String(user.user_id) !== currentManagedUserId"
+                    class="btn-secondary"
+                    type="button"
+                    @click="deleteManagementUser(user)"
+                    :disabled="managementSaving"
+                  >
+                    <i class="bi bi-trash" aria-hidden="true"></i>
+                  </button>
+                  <button
+                    v-if="String(user.user_id) !== currentManagedUserId"
+                    class="btn-secondary"
+                    type="button"
+                    @click="toggleManagementUserActive(user)"
+                    :disabled="managementSaving"
+                  >
+                    {{ user.is_active ? "Deaktivieren" : "Aktivieren" }}
+                  </button>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div v-else-if="activeManagementTab === 'groups'" class="user-management-tab-panel" role="tabpanel">
+        <div class="user-management-grid user-management-grid-single">
+          <section class="user-management-panel">
+            <div class="user-management-panel-head">
+              <div>
+                <h3>Gruppenverwaltung</h3>
+                <p>Gruppen steuern die Dashboard-Freigaben.</p>
+              </div>
+              <button class="btn-secondary" type="button" @click="resetGroupForm" :disabled="managementSaving">
+                Neue Gruppe
+              </button>
+            </div>
+
+            <div class="user-management-form-grid user-management-group-form-grid">
+              <label class="field-block">
+                <span class="field-label">Gruppenname</span>
+                <input v-model="groupForm.group_name" :disabled="managementSaving" />
+              </label>
+
+              <label class="field-block">
+                <span class="field-label">Beschreibung</span>
+                <input v-model="groupForm.group_description" :disabled="managementSaving" />
+              </label>
+
+              <div class="field-block user-management-checkbox-field">
+                <span class="field-label">Aktiv</span>
+                <label class="user-management-checkbox user-management-checkbox-card">
+                  <input v-model="groupForm.is_active" type="checkbox" :disabled="managementSaving" />
+                  <span>Gruppe aktiv</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="user-management-checklist">
+              <p class="field-label">Dashboard-Freigaben</p>
+              <label
+                v-for="dashboardEntry in managementDashboards"
+                :key="dashboardEntry.dashboard_id"
+                class="user-management-checkitem"
+              >
+                <input
+                  v-model="groupForm.dashboard_ids"
+                  type="checkbox"
+                  :value="dashboardEntry.dashboard_id"
+                  :disabled="managementSaving"
+                />
+                <span>{{ dashboardEntry.dashboard_name }}</span>
+              </label>
+            </div>
+
+            <button class="btn-primary" type="button" @click="saveManagementGroup" :disabled="managementSaving">
+              {{ managementSaving ? "Speichere..." : (selectedManagementGroupId ? "Gruppe aktualisieren" : "Gruppe anlegen") }}
+            </button>
+
+            <transition name="feedback-fade" mode="out-in">
+              <div
+                v-if="managementError"
+                class="feedback-panel feedback-panel-error user-management-inline-feedback"
+              >
+                <p class="error">{{ managementError }}</p>
+              </div>
+              <div
+                v-else-if="managementNotice"
+                class="feedback-panel feedback-panel-success user-management-inline-feedback"
+              >
+                <p>{{ managementNotice }}</p>
+              </div>
+            </transition>
+          </section>
+        </div>
+
+        <div class="user-management-lists user-management-lists-single user-management-group-lists">
+          <section class="user-management-list-card">
+            <div class="user-management-panel-head">
+              <div>
+                <h3>Gruppenübersicht</h3>
+              </div>
+            </div>
+            <div class="user-management-list user-management-group-card-list">
+              <article v-for="group in managementGroups" :key="`list-group-${group.group_id}`" class="user-management-list-item">
+                <div class="user-management-list-row">
+                  <strong>{{ group.group_name }}</strong>
+                  <span class="user-management-state" :class="{ 'is-inactive': !group.is_active }">
+                    {{ group.is_active ? "Aktiv" : "Inaktiv" }}
+                  </span>
+                </div>
+                <p>{{ group.group_description || "Keine Beschreibung" }}</p>
+                <small>
+                  {{ Array.isArray(group.dashboards) && group.dashboards.length ? group.dashboards.map((entry) => entry.dashboard_name).join(", ") : "Keine Dashboard-Freigaben" }}
+                </small>
+                <div class="user-management-list-actions">
+                  <button class="btn-secondary" type="button" @click="editManagementGroup(group.group_id)" :disabled="managementSaving">
+                    <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                  </button>
+                  <button class="btn-secondary" type="button" @click="deleteManagementGroup(group)" :disabled="managementSaving">
+                    <i class="bi bi-trash" aria-hidden="true"></i>
+                  </button>
+                  <button class="btn-secondary" type="button" @click="toggleManagementGroupActive(group)" :disabled="managementSaving">
+                    {{ group.is_active ? "Deaktivieren" : "Aktivieren" }}
+                  </button>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div v-else-if="activeManagementTab === 'schools'" class="user-management-tab-panel" role="tabpanel">
+        <SchoolManagement
+          :management-token="effectiveManagementToken"
+          :is-management-session-active="isManagementSessionActive"
+          :management-schools="managementSchools"
+          :management-school-sources="managementSchoolSources"
+          @bootstrap-updated="applyManagementBootstrap"
+          @feedback="handleSchoolManagementFeedback"
+        />
+      </div>
+      <div v-else-if="activeManagementTab === 'snapshot-sj'" class="user-management-tab-panel" role="tabpanel">
+        <SnapshotSchoolYearManagement
+          :management-token="effectiveManagementToken"
+          :is-management-session-active="isManagementSessionActive"
+          :school-sources="managementSchoolSources"
+          :snapshots="managementSnapshots"
+          :terms="managementTerms"
+          @bootstrap-updated="applyManagementBootstrap"
+          @feedback="handleSnapshotManagementFeedback"
+        />
+      </div>
+      <div v-else-if="activeManagementTab === 'db-contents'" class="user-management-tab-panel" role="tabpanel">
+        <DbContentsManagement
+          :management-token="effectiveManagementToken"
+          :is-management-session-active="isManagementSessionActive"
+          :snapshots="managementSnapshots"
+          @feedback="handleSnapshotManagementFeedback"
+        />
+      </div>
+      <div v-else class="user-management-tab-panel" role="tabpanel">
+        <SnapshotManagement
+          :management-token="effectiveManagementToken"
+          :is-management-session-active="isManagementSessionActive"
+          :snapshots="managementSnapshots"
+          :schools="managementSchools"
+          :school-sources="managementSchoolSources"
+          :terms="managementTerms"
+          @bootstrap-updated="applyManagementBootstrap"
+          @feedback="handleSnapshotManagementFeedback"
+        />
+      </div>
+    </template>
+  </section>

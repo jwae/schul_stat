@@ -1,0 +1,149 @@
+<div class="database-connect-stack">
+  <section class="card login-card database-connect-card">
+    <div class="database-connect-header">
+      <div>
+        <p class="eyebrow">Schritt 1</p>
+        <h2>Mit der Statistik-Datenbank verbinden</h2>
+        <p class="database-connect-intro">
+          Verbinde die Anwendung mit deiner Statistik-Datenbank.
+        </p>
+      </div>
+
+      <div
+        class="connection-status connection-status-panel"
+        :class="{ connected: serverStatus === 'Verbunden', disconnected: serverStatus === 'Nicht verbunden' }"
+      >
+        <i v-if="serverStatus === 'Verbunden'" class="bi bi-check2-circle" title="Verbunden" aria-label="Verbunden"></i>
+        <i v-else-if="serverStatus === 'Nicht verbunden'" class="bi bi-x-circle status-icon-error" title="Keine Verbindung" aria-label="Keine Verbindung"></i>
+        <i v-else class="bi bi-question-circle" title="Unbekannt" aria-label="Unbekannt"></i>
+        <div class="connection-status-copy">
+          <strong>{{ serverStatus || "Noch nicht geprueft" }}</strong>
+          <span>
+            {{ serverConnected ? `${host}:${port} / ${database}` : "Server, Port und Datenbank pruefen" }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="database-connect-layout">
+      <div class="login-form database-connect-form">
+        <div class="form-grid">
+          <div class="server-field-row field-block-wide">
+            <label class="field-block server-field-control">
+              <span class="field-label">MariaDB-Server und Port</span>
+              <input
+                v-model="hostModel"
+                autocomplete="off"
+                :placeholder="`z. B. 127.0.0.1:${port || 3306}`"
+                @keyup.enter="$emit('connect')"
+              />
+            </label>
+
+            <div class="database-settings-toggle">
+              <button
+                class="btn-secondary"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#database-settings-collapse"
+                :aria-expanded="showDatabaseSettings ? 'true' : 'false'"
+                :aria-label="showDatabaseSettings ? 'Einstellungen ausblenden' : 'Einstellungen anzeigen'"
+                aria-controls="database-settings-collapse"
+                :title="showDatabaseSettings ? 'Einstellungen ausblenden' : 'Einstellungen anzeigen'"
+              >
+                <i class="bi bi-gear"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="database-settings-collapse"
+          ref="databaseSettingsCollapse"
+          class="collapse"
+        >
+          <div class="form-grid form-grid-advanced form-grid-settings">
+            <div class="settings-info-box field-block-wide">
+              <i class="bi bi-info-circle"></i>
+              <span>Diese Daten werden benoetigt fuer den Zugriff auf die Dashboard-Datenbank.</span>
+            </div>
+            <label class="field-block field-fixed-200">
+              <span class="field-label">Port</span>
+              <input
+                v-model.number="portModel"
+                type="number"
+                min="1"
+                max="65535"
+                @keyup.enter="$emit('connect')"
+              />
+            </label>
+
+            <label class="field-block field-fixed-200">
+              <span class="field-label">Datenbank</span>
+              <input
+                v-model="databaseModel"
+                autocomplete="off"
+                @keyup.enter="$emit('connect')"
+              />
+            </label>
+
+            <label class="field-block field-fixed-200">
+              <span class="field-label">DB-Benutzer</span>
+              <input
+                v-model="dbUserModel"
+                autocomplete="username"
+                @keyup.enter="$emit('connect')"
+              />
+            </label>
+
+            <label class="field-block field-fixed-200">
+              <span class="field-label">Passwort</span>
+              <input
+                v-model="dbPasswordModel"
+                type="password"
+                autocomplete="current-password"
+                @keyup.enter="$emit('connect')"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div class="database-connect-actions">
+          <button class="btn-primary" @click="$emit('connect')" :disabled="connecting || !dbPasswordModel" type="button">
+            {{ connecting ? "Pruefe Verbindung..." : "Datenbankverbindung testen" }}
+          </button>
+
+          <button
+            v-if="serverConnected"
+            class="btn-secondary"
+            @click="$emit('continue')"
+            type="button"
+          >
+            Weiter
+          </button>
+        </div>
+
+        <div v-if="error" class="feedback-panel feedback-panel-error">
+          <p class="feedback-title">Verbindung fehlgeschlagen</p>
+          <p class="error">{{ error }}</p>
+          <p v-if="errorDetails" class="error-detail">{{ errorDetails }}</p>
+          <p v-if="errorCode" class="error-detail">Code: {{ errorCode }}</p>
+        </div>
+
+        <div v-else-if="serverConnected" class="feedback-panel feedback-panel-success">
+          <p class="feedback-title">Verbindung erfolgreich</p>
+          <p>Die Datenbank ist erreichbar. Mit "Weiter" gelangst du zum Login in die App.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card login-card database-connect-info-block">
+    <h3>Struktur der APP</h3>
+    
+    <img
+      class="database-connect-info-image"
+      src="/src/assets/app_struktur.png"
+      alt="Struktur der App"
+    />
+  </section>
+</div>

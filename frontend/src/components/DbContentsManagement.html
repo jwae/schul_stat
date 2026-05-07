@@ -1,0 +1,224 @@
+<section class="snapshot-management-page">
+  <div v-if="!isManagementSessionActive" class="user-management-empty">
+    <p>Fuer die DB-Inhalte bitte zuerst die Verwaltung laden.</p>
+  </div>
+
+  <template v-else>
+    <section class="user-management-list-card snapshot-management-filter-card">
+      <div class="user-management-panel-head">
+        <div class="snapshot-management-title-block">
+          <h3>DB Inhalte</h3>
+          <p>Zeigt die Inhalte von <code>snapshot_student</code> und <code>snapshot_teacher</code> fuer einen Snapshot-Stand.</p>
+        </div>
+      </div>
+
+      <div class="snapshot-management-filter-row">
+        <label class="snapshot-management-field">
+          <span>Snapshot</span>
+          <select v-model="selectedSnapshotKey" :disabled="loading || !snapshotOptions.length">
+            <option value="" disabled>Snapshot waehlen</option>
+            <option v-for="option in snapshotOptions" :key="option.key" :value="option.key">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <button
+          class="btn-primary snapshot-management-primary-action"
+          type="button"
+          @click="loadDbContents"
+          :disabled="loading || !selectedSnapshotOption"
+        >
+          {{ loading ? "Lade..." : "Inhalte laden" }}
+        </button>
+      </div>
+    </section>
+
+    <section class="user-management-list-card snapshot-management-table-card">
+      <div class="user-management-panel-head">
+        <div>
+          <h3 class="db-contents-heading">
+            <button
+              class="db-contents-toggle-icon"
+              type="button"
+              @click="toggleStudentSection"
+              :aria-expanded="studentSectionOpen ? 'true' : 'false'"
+              aria-label="Snapshot Schueler ein- oder ausklappen"
+            >
+              <i
+                class="bi"
+                :class="studentSectionOpen ? 'bi-chevron-up' : 'bi-chevron-down'"
+                aria-hidden="true"
+              ></i>
+            </button>
+            <span>Snapshot Schueler</span>
+          </h3>
+          <p v-if="selectedSnapshotOption">
+            {{ filteredSnapshotStudents.length }} Datensatz{{ filteredSnapshotStudents.length === 1 ? "" : "e" }} fuer {{ selectedSnapshotOption.label }}.
+          </p>
+          <p v-else>Bitte zuerst einen Snapshot waehlen.</p>
+        </div>
+        <label class="db-contents-inline-filter">
+          <span class="db-contents-inline-filter-label">Filter</span>
+          <select v-model="studentSearchColumn" class="db-contents-column-select">
+            <option v-for="col in studentFilterColumns" :key="col.key" :value="col.key">
+              {{ col.label }}
+            </option>
+          </select>
+          <span class="db-contents-inline-filter-input">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input v-model="studentSearch" type="text" :placeholder="studentSearchColumn ? 'Spalte filtern' : 'Schueler filtern'" />
+            <button
+              v-if="studentSearch || studentSearchColumn"
+              class="db-contents-inline-filter-clear"
+              type="button"
+              @click="studentSearch = ''; studentSearchColumn = '';"
+              aria-label="Schueler-Filter leeren"
+            >
+              <i class="bi bi-x" aria-hidden="true"></i>
+            </button>
+          </span>
+        </label>
+      </div>
+
+      <div v-if="studentSectionOpen" class="snapshot-management-table-wrap db-contents-table-wrap">
+        <table class="snapshot-management-table">
+          <thead>
+            <tr>
+              <th>Nr.</th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('snapshot_id')">Snap-ID <span v-if="sortIndicator('snapshot_id', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("snapshot_id", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('snr')">SNR <span v-if="sortIndicator('snr', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("snr", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('school_name')">Schule <span v-if="sortIndicator('school_name', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("school_name", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('school_city')">Ort <span v-if="sortIndicator('school_city', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("school_city", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('student_no')">SuS-Nr. <span v-if="sortIndicator('student_no', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("student_no", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('school_form_short')">SF <span v-if="sortIndicator('school_form_short', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("school_form_short", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('education_track_label')">BG <span v-if="sortIndicator('education_track_label', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("education_track_label", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('ef')">EF <span v-if="sortIndicator('ef', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("ef", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('class_label')">Kl. <span v-if="sortIndicator('class_label', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("class_label", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('religion_label')">Rel. <span v-if="sortIndicator('religion_label', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("religion_label", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('special_needs')">FÖ<span v-if="sortIndicator('special_needs', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("special_needs", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('support_focus1_label')">FSP 1 <span v-if="sortIndicator('support_focus1_label', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("support_focus1_label", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('support_focus2_label')">FSP 2 <span v-if="sortIndicator('support_focus2_label', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("support_focus2_label", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('target_different')">zieldiff. <span v-if="sortIndicator('target_different', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("target_different", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('sex_label')">Geschl. <span v-if="sortIndicator('sex_label', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("sex_label", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('nation_label')">Nation <span v-if="sortIndicator('nation_label', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("nation_label", studentSortKey, studentSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleStudentSort('migration_label')">Migr. <span v-if="sortIndicator('migration_label', studentSortKey, studentSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("migration_label", studentSortKey, studentSortDirection) }}</span></button></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, index) in filteredSnapshotStudents" :key="`snapshot-student-${row.snapshot_id}-${row.student_no}-${index}`">
+              <td>{{ index + 1 }}</td>
+              <td>{{ row.snapshot_id || "-" }}</td>
+              <td>{{ row.snr || "-" }}</td>
+              <td class="snapshot-management-name" :title="row.school_name || 'Ohne Name'">{{ row.school_name || "-" }}</td>
+              <td :title="row.school_city || '-'">{{ truncateText(row.school_city, 15) }}</td>
+              <td>{{ row.student_no || "-" }}</td>
+              <td :title="row.school_form_label || '-'">{{ row.school_form_short || "-" }}</td>
+              <td :title="row.education_track_label || '-'">{{ row.education_track_sf || "-" }}</td>
+              <td>{{ formatFlag(row.ef) }}</td>
+              <td>{{ formatClassLabel(row) }}</td>
+              <td>{{ row.religion_label || "-" }}</td>
+              <td>{{ formatFlag(row.special_needs) }}</td>
+              <td :title="row.support_focus1_label || '-'">{{ truncateText(row.support_focus1_label, 8) }}</td>
+              <td :title="row.support_focus2_label || '-'">{{ truncateText(row.support_focus2_label, 8) }}</td>
+              <td>{{ formatFlag(row.target_different) }}</td>
+              <td>{{ formatSexInitial(row.sex_label) }}</td>
+              <td>{{ row.nation_label || "-" }}</td>
+              <td>{{ formatFlag(row.migration) }}</td>
+            </tr>
+            <tr v-if="!filteredSnapshotStudents.length">
+              <td colspan="17" class="snapshot-management-table-empty">
+                {{ selectedSnapshotOption ? "Keine Daten in snapshot_student gefunden." : "Noch kein Snapshot ausgewaehlt." }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="user-management-list-card snapshot-management-table-card">
+      <div class="user-management-panel-head">
+        <div>
+          <h3 class="db-contents-heading">
+            <button
+              class="db-contents-toggle-icon"
+              type="button"
+              @click="toggleTeacherSection"
+              :aria-expanded="teacherSectionOpen ? 'true' : 'false'"
+              aria-label="Snapshot Teacher ein- oder ausklappen"
+            >
+              <i
+                class="bi"
+                :class="teacherSectionOpen ? 'bi-chevron-up' : 'bi-chevron-down'"
+                aria-hidden="true"
+              ></i>
+            </button>
+            <span>snapshot_teacher</span>
+          </h3>
+          <p v-if="selectedSnapshotOption">
+            {{ filteredSnapshotTeachers.length }} Datensatz{{ filteredSnapshotTeachers.length === 1 ? "" : "e" }} fuer {{ selectedSnapshotOption.label }}.
+          </p>
+          <p v-else>Bitte zuerst einen Snapshot waehlen.</p>
+        </div>
+        <label class="db-contents-inline-filter">
+          <span class="db-contents-inline-filter-label">Filter</span>
+          <select v-model="teacherSearchColumn" class="db-contents-column-select">
+            <option v-for="col in teacherFilterColumns" :key="col.key" :value="col.key">
+              {{ col.label }}
+            </option>
+          </select>
+          <span class="db-contents-inline-filter-input">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input v-model="teacherSearch" type="text" :placeholder="teacherSearchColumn ? 'Spalte filtern' : 'Teacher filtern'" />
+            <button
+              v-if="teacherSearch || teacherSearchColumn"
+              class="db-contents-inline-filter-clear"
+              type="button"
+              @click="teacherSearch = ''; teacherSearchColumn = '';"
+              aria-label="Teacher-Filter leeren"
+            >
+              <i class="bi bi-x" aria-hidden="true"></i>
+            </button>
+          </span>
+        </label>
+      </div>
+
+      <div v-if="teacherSectionOpen" class="snapshot-management-table-wrap db-contents-table-wrap">
+        <table class="snapshot-management-table">
+          <thead>
+            <tr>
+              <th>Nr.</th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleTeacherSort('snapshot_id')">Snap-ID <span v-if="sortIndicator('snapshot_id', teacherSortKey, teacherSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("snapshot_id", teacherSortKey, teacherSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleTeacherSort('snr')">SNR <span v-if="sortIndicator('snr', teacherSortKey, teacherSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("snr", teacherSortKey, teacherSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleTeacherSort('school_name')">Schule <span v-if="sortIndicator('school_name', teacherSortKey, teacherSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("school_name", teacherSortKey, teacherSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleTeacherSort('school_city')">Ort Schule <span v-if="sortIndicator('school_city', teacherSortKey, teacherSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("school_city", teacherSortKey, teacherSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleTeacherSort('teacher_no')">LNr. <span v-if="sortIndicator('teacher_no', teacherSortKey, teacherSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("teacher_no", teacherSortKey, teacherSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleTeacherSort('sex_label')">Geschl. <span v-if="sortIndicator('sex_label', teacherSortKey, teacherSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("sex_label", teacherSortKey, teacherSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleTeacherSort('nation_label')">Nation <span v-if="sortIndicator('nation_label', teacherSortKey, teacherSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("nation_label", teacherSortKey, teacherSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleTeacherSort('teacher_city')">Wohnort <span v-if="sortIndicator('teacher_city', teacherSortKey, teacherSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("teacher_city", teacherSortKey, teacherSortDirection) }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleTeacherSort('age')">Alter <span v-if="sortIndicator('age', teacherSortKey, teacherSortDirection)" class="snapshot-management-sort-indicator">{{ sortIndicator("age", teacherSortKey, teacherSortDirection) }}</span></button></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, index) in filteredSnapshotTeachers" :key="`snapshot-teacher-${row.snapshot_id}-${row.teacher_no}-${index}`">
+              <td>{{ index + 1 }}</td>
+              <td>{{ row.snapshot_id || "-" }}</td>
+              <td>{{ row.snr || "-" }}</td>
+              <td class="snapshot-management-name" :title="row.school_name || 'Ohne Name'">{{ row.school_name || "-" }}</td>
+              <td>{{ row.school_city || "-" }}</td>
+              <td>{{ row.teacher_no || "-" }}</td>
+              <td>{{ formatSexInitial(row.sex_label) }}</td>
+              <td>{{ row.nation_label || "-" }}</td>
+              <td>{{ row.teacher_city || "-" }}</td>
+              <td>{{ row.age || 0 }}</td>
+            </tr>
+            <tr v-if="!filteredSnapshotTeachers.length">
+              <td colspan="10" class="snapshot-management-table-empty">
+                {{ selectedSnapshotOption ? "Keine Daten in snapshot_teacher gefunden." : "Noch kein Snapshot ausgewaehlt." }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </template>
+</section>

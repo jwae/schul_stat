@@ -1,0 +1,251 @@
+openapi: 3.0.3
+info:
+  title: Schul-Stat API
+  description: API for collecting and aggregating statistical data from school databases.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          type: string
+        code:
+          type: string
+
+    School:
+      type: object
+      properties:
+        snr:
+          type: string
+        name:
+          type: string
+        city:
+          type: string
+
+    Snapshot:
+      type: object
+      properties:
+        termId:
+          type: integer
+        schoolYear:
+          type: integer
+        termNo:
+          type: integer
+        snapshotDate:
+          type: string
+          format: date
+        info:
+          type: string
+
+    KPIBreakdownItem:
+      type: object
+      properties:
+        name:
+          type: string
+        value:
+          type: number
+
+    OverviewData:
+      type: object
+      properties:
+        totals:
+          type: object
+          properties:
+            totalStudents:
+              type: number
+            specialNeeds:
+              type: number
+            specialNeedsPercent:
+              type: number
+        genderBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/KPIBreakdownItem'
+        gradeBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/KPIBreakdownItem'
+        studentTrend:
+          type: array
+          items:
+            type: object
+            properties:
+              snapshot_date:
+                type: string
+              total_students:
+                type: number
+              ef_students:
+                type: number
+
+    TeacherData:
+      type: object
+      properties:
+        totalTeachers:
+          type: number
+        sexBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/KPIBreakdownItem'
+        ageBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/KPIBreakdownItem'
+
+    User:
+      type: object
+      properties:
+        user_id:
+          type: string
+        username:
+          type: string
+        group_name:
+          type: string
+        dashboards:
+          type: array
+          items:
+            type: string
+
+paths:
+  /api/connection/status:
+    get:
+      summary: Get database connection status
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configured:
+                    type: boolean
+                  host:
+                    type: string
+
+  /api/connection/connect:
+    post:
+      summary: Connect to MariaDB
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host, database, username, password]
+              properties:
+                host:
+                  type: string
+                port:
+                  type: integer
+                database:
+                  type: string
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Connected successfully
+
+  /api/auth/login:
+    post:
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+
+  /api/meta/schools:
+    get:
+      summary: List schools
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: schoolYear
+          in: query
+          schema:
+            type: integer
+        - name: termNo
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of schools
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/School'
+
+  /api/kpi/overview:
+    get:
+      summary: Get overview statistics
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: snapshotDate
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Statistics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OverviewData'
+
+  /api/kpi/teachers:
+    get:
+      summary: Get teacher statistics
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: snapshotDate
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Teacher data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherData'

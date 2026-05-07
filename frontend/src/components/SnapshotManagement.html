@@ -1,0 +1,213 @@
+<section class="snapshot-management-page">
+  <div v-if="!isManagementSessionActive" class="user-management-empty">
+    <p>Fuer Daten laden und Loeschen bitte zuerst die Verwaltung laden.</p>
+  </div>
+
+  <template v-else>
+    <section class="user-management-list-card snapshot-management-filter-card">
+      <div class="user-management-panel-head">
+        <div class="snapshot-management-title-block">
+          <h3>Snapshot erstellen</h3>
+          <p>Alle <span class="snapshot-management-active-schools-highlight">aktiven Schulen</span> aus der Schulserver-Liste werden automatisch in den neu erstellten Snapshot aufgenommen.</p>
+        </div>
+        <div class="snapshot-management-head-actions">
+          <button
+            class="btn-secondary snapshot-management-table-head-action snapshot-management-help-button"
+            type="button"
+            @click="openHelpOverlay"
+          >
+            ? Hilfe
+          </button>
+          <div class="snapshot-management-info-card">
+            <span class="snapshot-management-info-label">Akt. Schuljahr</span>
+            <strong class="snapshot-management-info-value">{{ currentSchoolYearLabel }}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="snapshot-management-filter-row">
+        <label class="snapshot-management-field snapshot-management-field-compact">
+          <span>Schuljahr</span>
+          <select v-model="selectedTermLabel" :disabled="managementSaving || !termLabelOptions.length">
+            <option value="" disabled>Schuljahr waehlen</option>
+            <option v-for="label in termLabelOptions" :key="`snapshot-manage-term-${label}`" :value="label">
+              {{ label }}
+            </option>
+          </select>
+        </label>
+        <label class="snapshot-management-field snapshot-management-field-compact">
+          <span>Datum</span>
+          <input v-model="snapshotDate" type="date" :disabled="managementSaving" />
+        </label>
+        <label class="snapshot-management-field">
+          <span>Info</span>
+          <input v-model="snapshotInfo" type="text" placeholder="Snapshot-Beschreibung" :disabled="managementSaving" />
+        </label>
+        <button
+          class="btn-primary snapshot-management-primary-action"
+          type="button"
+          @click="createSnapshots"
+          :disabled="managementSaving || !selectedTermLabel || !snapshotDate || !String(snapshotInfo || '').trim()"
+        >
+          Snapshot erstellen
+        </button>
+      </div>
+    </section>
+
+    <section class="user-management-list-card snapshot-management-table-card">
+      <div class="user-management-panel-head">
+        <div>
+          <h3>Snapshot auswaehlen und Schulen zuordnen</h3>
+          <p>Im Dropdown stehen die erstellten Snapshots, fuer die Schulen hinzugefuegt oder entfernt werden koennen.</p>
+        </div>
+      </div>
+
+      <div class="snapshot-management-filter-row">
+        <label class="snapshot-management-field">
+          <span>Snapshot</span>
+          <select v-model="selectedSnapshotKey" :disabled="managementSaving || !snapshotOptions.length">
+            <option value="" disabled>Snapshot waehlen</option>
+            <option v-for="option in snapshotOptions" :key="option.key" :value="option.key">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <button
+          class="btn-secondary snapshot-management-delete-all"
+          type="button"
+          @click="deleteSelectedSnapshotGroup"
+          :disabled="managementSaving || !selectedSnapshotOption"
+        >
+          Gesamtes Snapshot loeschen
+        </button>
+      </div>
+
+      <div class="user-management-panel-head">
+        <div>
+          <h3>Alle Schulen und ihre Zuordnung zum Snapshot:</h3>
+          <p v-if="selectedSnapshotOption">
+            {{ filteredSnapshots.length }} Schule{{ filteredSnapshots.length === 1 ? "" : "n" }} sind aktuell in {{ selectedSnapshotOption.label }} enthalten.
+          </p>
+          <p v-else>Bitte zuerst einen Snapshot waehlen.</p>
+        </div>
+      </div>
+
+      <div class="snapshot-management-table-wrap">
+        <table class="snapshot-management-table">
+          <thead>
+            <tr>
+              <th>Nr.</th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('is_in_snapshot')">Im Snapshot <span v-if="sortIndicator('is_in_snapshot')" class="snapshot-management-sort-indicator">{{ sortIndicator("is_in_snapshot") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('snr')">SNR <span v-if="sortIndicator('snr')" class="snapshot-management-sort-indicator">{{ sortIndicator("snr") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('school_name')">Schule <span v-if="sortIndicator('school_name')" class="snapshot-management-sort-indicator">{{ sortIndicator("school_name") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('school_form_sf')">SF <span v-if="sortIndicator('school_form_sf')" class="snapshot-management-sort-indicator">{{ sortIndicator("school_form_sf") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('city')">Ort <span v-if="sortIndicator('city')" class="snapshot-management-sort-indicator">{{ sortIndicator("city") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('imported_at')">Importiert <span v-if="sortIndicator('imported_at')" class="snapshot-management-sort-indicator">{{ sortIndicator("imported_at") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('info')">Info <span v-if="sortIndicator('info')" class="snapshot-management-sort-indicator">{{ sortIndicator("info") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('source')">Quelle <span v-if="sortIndicator('source')" class="snapshot-management-sort-indicator">{{ sortIndicator("source") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('record_count')">Datensaetze <span v-if="sortIndicator('record_count')" class="snapshot-management-sort-indicator">{{ sortIndicator("record_count") }}</span></button></th>
+              <th>Aktionen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(school, index) in sortedSchoolRows"
+              :key="`snapshot-row-${selectedSnapshotKey || 'empty'}-${school.snr || index}`"
+              :class="{ 'snapshot-management-row-member': school.is_in_snapshot }"
+            >
+              <td>{{ index + 1 }}</td>
+              <td>
+                <span class="snapshot-membership-badge" :class="{ 'is-member': school.is_in_snapshot }">
+                  {{ school.is_in_snapshot ? "Ja" : "Nein" }}
+                </span>
+              </td>
+              <td>{{ school.snr || "-" }}</td>
+              <td class="snapshot-management-name" :title="school.school_name || 'Ohne Name'">{{ school.school_name || "-" }}</td>
+              <td>{{ school.school_form_sf || "-" }}</td>
+              <td>{{ school.city || "-" }}</td>
+              <td>{{ formatImportedAt(school.imported_at) }}</td>
+              <td :title="school.info || '-'">{{ school.info || "-" }}</td>
+              <td :title="school.source || '-'">{{ school.source || "-" }}</td>
+              <td>{{ Number(school.record_count || 0) }}</td>
+              <td>
+                <div class="snapshot-management-actions">
+                  <button
+                    v-if="school.is_in_snapshot"
+                    class="btn-secondary snapshot-management-icon-button is-danger"
+                    type="button"
+                    @click="deleteSnapshot(school)"
+                    :disabled="managementSaving"
+                    title="Schule aus dem Snapshot loeschen."
+                    aria-label="Schule aus dem Snapshot loeschen."
+                  >
+                    <i class="bi bi-trash" aria-hidden="true"></i>
+                  </button>
+                  <button
+                    v-else
+                    class="btn-secondary snapshot-management-icon-button is-add"
+                    type="button"
+                    @click="addSchoolToSnapshot(school)"
+                    :disabled="managementSaving || !selectedSnapshotOption"
+                    title="Schule in Snapshot aufnehmen"
+                    aria-label="Schule in Snapshot aufnehmen"
+                  >
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!sortedSchoolRows.length">
+              <td colspan="11" class="snapshot-management-table-empty">
+                {{ selectedSnapshotKey ? "Keine Schulen vorhanden." : "Noch kein Snapshot ausgewaehlt." }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div v-if="deleteGroupDialogOpen" class="snapshot-confirm-overlay" @click.self="closeDeleteGroupDialog">
+      <section class="snapshot-confirm-dialog" role="dialog" aria-modal="true" aria-label="Snapshot loeschen">
+        <div class="snapshot-confirm-icon" aria-hidden="true">
+          <i class="bi bi-exclamation-triangle"></i>
+        </div>
+        <div class="snapshot-confirm-copy">
+          <h3>Gesamten Snapshot loeschen?</h3>
+          <p>
+            Alle zugehoerigen Daten des Snapshot-Stands
+            <strong>"{{ deleteGroupDialogLabel }}"</strong>
+            werden entfernt.
+          </p>
+          <p>Dieser Vorgang kann nicht rueckgaengig gemacht werden.</p>
+        </div>
+        <div class="snapshot-confirm-actions">
+          <button
+            class="btn-secondary"
+            type="button"
+            @click="closeDeleteGroupDialog"
+            :disabled="managementSaving"
+          >
+            Abbrechen
+          </button>
+          <button
+            class="btn-danger"
+            type="button"
+            @click="confirmDeleteSelectedSnapshotGroup"
+            :disabled="managementSaving"
+          >
+            Jetzt loeschen
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <HelpOverlay
+      v-if="helpOverlayOpen"
+      title="Hilfe zu Snapshot verwalten"
+      subtitle="Kurzer Ueberblick ueber die wichtigsten Funktionen."
+      :items="helpOverlayItems"
+      aria-label="Hilfe Snapshot verwalten"
+      @close="closeHelpOverlay"
+    />
+  </template>
+</section>

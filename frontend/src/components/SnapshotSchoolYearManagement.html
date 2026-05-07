@@ -1,0 +1,233 @@
+<section class="snapshot-management-page">
+  <div v-if="!isManagementSessionActive" class="user-management-empty">
+    <p>Fuer Snapshot-Test und Datenimport bitte zuerst die Verwaltung laden.</p>
+  </div>
+
+  <template v-else>
+    <section class="user-management-list-card snapshot-management-filter-card">
+      <div class="user-management-panel-head">
+        <div class="snapshot-management-title-block">
+          <h3>Snapshot pruefen und Daten holen.</h3>
+          <p>Fuer die Schulen des gewaehlten Snapshots lassen sich Server- und Datenbank-Verbindungen testen und Statistikdaten importieren.</p>
+        </div>
+        <div class="snapshot-management-head-actions">
+          <button
+            class="btn-secondary snapshot-management-table-head-action snapshot-management-help-button"
+            type="button"
+            @click="openHelpOverlay"
+          >
+            ? Hilfe
+          </button>
+          <div class="snapshot-management-info-card">
+            <span class="snapshot-management-info-label">Akt. Schuljahr</span>
+            <strong class="snapshot-management-info-value">{{ currentSchoolYearLabel }}</strong>
+          </div>
+        </div>
+      </div>
+      <div class="snapshot-management-filter-row">
+        <label class="snapshot-management-field snapshot-management-field-compact">
+          <span>Snapshots</span>
+          <select v-model="selectedSnapshotKey">
+            <option value="" disabled>Snapshot waehlen</option>
+            <option v-for="option in snapshotOptions" :key="option.key" :value="option.key">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <button
+          class="btn-secondary snapshot-management-primary-action"
+          type="button"
+          @click="handleConnectionTestAll"
+          :disabled="managementSaving"
+        >
+          Verbindungen testen
+        </button>
+        <button
+          class="btn-secondary snapshot-management-primary-action"
+          type="button"
+          @click="handleSnapshotFetchData"
+          :disabled="managementSaving || !selectedSnapshotKey"
+        >
+          Daten holen
+        </button>
+        <button
+          class="btn-secondary snapshot-management-primary-action"
+          type="button"
+          @click="handleTeacherFetchData"
+          :disabled="managementSaving || !selectedSnapshotKey"
+        >
+          Lehrerdaten holen
+        </button>
+        <div class="snapshot-management-log-tools">
+          <label class="snapshot-management-toggle">
+            <span
+              class="snapshot-management-toggle-card is-switch"
+              title="Protokolliert den Import der Daten pro Schule als Textdatei im Ordner logs/import-preview."
+            >
+              <input
+                v-model="savePreviewLog"
+                class="snapshot-management-switch-input"
+                type="checkbox"
+                :disabled="managementSaving"
+              />
+              <span class="snapshot-management-switch-ui" aria-hidden="true"></span>
+              <span>Protokolliere Import der Daten</span>
+            </span>
+          </label>
+        </div>
+        <button
+          class="btn-secondary snapshot-management-primary-action"
+          type="button"
+          @click="handleDeletePreviewLogs"
+          :disabled="managementSaving"
+          title="Loescht alle gespeicherten Vorschau-Logs im Ordner logs/import-preview."
+          aria-label="Loescht alle gespeicherten Vorschau-Logs im Ordner logs/import-preview."
+        >
+          Alte Logs loeschen
+        </button>
+      </div>
+    </section>
+
+    <section class="user-management-list-card snapshot-management-table-card">
+      <div class="user-management-panel-head">
+        <div>
+          <h3>Schulen im Snapshot</h3>
+          <p>
+            {{ sortedSchoolSources.length }} Schule{{ sortedSchoolSources.length === 1 ? "" : "n" }} sind im ausgewaehlten Snapshot enthalten.
+          </p>
+        </div>
+      </div>
+
+      <div class="snapshot-management-table-wrap">
+        <table :key="`snapshot-table-${selectedSnapshotKey || 'empty'}`" class="snapshot-management-table">
+          <thead>
+            <tr>
+              <th>Nr.</th>
+              <th>Check</th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('snr')">SNR <span v-if="sortIndicator('snr')" class="snapshot-management-sort-indicator">{{ sortIndicator("snr") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('school_name')">Schule <span v-if="sortIndicator('school_name')" class="snapshot-management-sort-indicator">{{ sortIndicator("school_name") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('school_form_sf')">SF <span v-if="sortIndicator('school_form_sf')" class="snapshot-management-sort-indicator">{{ sortIndicator("school_form_sf") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('city')">Ort <span v-if="sortIndicator('city')" class="snapshot-management-sort-indicator">{{ sortIndicator("city") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('record_count')">Datensaetze <span v-if="sortIndicator('record_count')" class="snapshot-management-sort-indicator">{{ sortIndicator("record_count") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('teacher_count')">Lehrer <span v-if="sortIndicator('teacher_count')" class="snapshot-management-sort-indicator">{{ sortIndicator("teacher_count") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('imported_at')">Letzter Import <span v-if="sortIndicator('imported_at')" class="snapshot-management-sort-indicator">{{ sortIndicator("imported_at") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('server_status')">Online <span v-if="sortIndicator('server_status')" class="snapshot-management-sort-indicator">{{ sortIndicator("server_status") }}</span></button></th>
+              <th><button class="snapshot-management-sort" type="button" @click="toggleSort('db_status')">DB <span v-if="sortIndicator('db_status')" class="snapshot-management-sort-indicator">{{ sortIndicator("db_status") }}</span></button></th>
+              <th>Aktionen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(source, index) in sortedSchoolSources" :key="`snapshot-create-school-${selectedSnapshotKey || 'empty'}-${source.source_id}`">
+              <td>{{ index + 1 }}</td>
+              <td>
+                <input
+                  type="checkbox"
+                  :checked="isSourceChecked(source)"
+                  @change="checkedSchoolBySourceId[source.source_id] = $event.target.checked"
+                  :disabled="managementSaving"
+                />
+              </td>
+              <td>{{ source.snr || "-" }}</td>
+              <td class="snapshot-management-name" :title="source.school_name || 'Ohne Name'">{{ source.school_name || "-" }}</td>
+              <td>{{ source.school_form_sf || "-" }}</td>
+              <td>{{ source.city || "-" }}</td>
+              <td>{{ recordCountForSource(source) }}</td>
+              <td>{{ teacherCountForSource(source) }}</td>
+              <td>{{ formatDateTime(importedAtForSource(source)) }}</td>
+              <td>
+                <span
+                  class="snapshot-status-dot"
+                  :class="statusDotClass(getServerStatus(source))"
+                  :title="statusDotLabel(getServerStatus(source), 'Online')"
+                  :aria-label="statusDotLabel(getServerStatus(source), 'Online')"
+                ></span>
+              </td>
+              <td>
+                <span
+                  class="snapshot-status-dot"
+                  :class="statusDotClass(getDatabaseStatus(source))"
+                  :title="statusDotLabel(getDatabaseStatus(source), 'Datenbank')"
+                  :aria-label="statusDotLabel(getDatabaseStatus(source), 'Datenbank')"
+                ></span>
+              </td>
+              <td>
+                <div class="snapshot-management-actions">
+                  <button
+                    class="btn-secondary"
+                    type="button"
+                    @click="handleConnectionTest(source)"
+                    :disabled="managementSaving"
+                  >
+                    Test
+                  </button>
+                  <button
+                    class="btn-secondary"
+                    type="button"
+                    @click="handleClassesInfo(source)"
+                    :disabled="managementSaving"
+                  >
+                    Info
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!sortedSchoolSources.length">
+              <td colspan="12" class="snapshot-management-table-empty">
+                {{ selectedSnapshotKey ? "Keine Schulen im ausgewaehlten Snapshot vorhanden." : "Bitte zuerst einen Snapshot auswaehlen." }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div v-if="infoDialogOpen" class="snapshot-info-overlay" @click.self="closeInfoDialog">
+      <section class="snapshot-info-dialog" role="dialog" aria-modal="true" :aria-label="infoDialogTitle">
+        <div class="snapshot-info-head">
+          <h3>{{ infoDialogTitle }}</h3>
+          <button class="btn-secondary snapshot-info-close" type="button" @click="closeInfoDialog">
+            Schliessen
+          </button>
+        </div>
+        <pre class="snapshot-info-body">{{ infoDialogBody }}</pre>
+      </section>
+    </div>
+    <div v-if="managementSaving" class="snapshot-loading-overlay" role="status" aria-live="polite" aria-modal="true">
+      <section class="snapshot-loading-dialog" aria-label="Import laeuft">
+        <span class="snapshot-loading-spinner" aria-hidden="true"></span>
+        <strong>{{ overlayTitle }}</strong>
+        <p v-if="overlayProgressCounter" class="snapshot-loading-progress">{{ overlayProgressCounter }}</p>
+        <div
+          v-if="overlayProgressCounter"
+          class="snapshot-loading-progressbar"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="overlayProgressPercent"
+          :aria-valuetext="`${overlayProgressPercent}% abgeschlossen`"
+        >
+          <span class="snapshot-loading-progressbar-fill" :style="{ width: `${overlayProgressPercent}%` }"></span>
+        </div>
+        <p>{{ overlayBody }}</p>
+        <button
+          v-if="canAbortCurrentImport"
+          class="btn-secondary"
+          type="button"
+          @click="handleAbortSnapshotImport"
+          :disabled="importAbortRequested"
+        >
+          {{ importAbortRequested ? "Import wird abgebrochen..." : "Import abbrechen" }}
+        </button>
+      </section>
+    </div>
+
+    <HelpOverlay
+      v-if="helpOverlayOpen"
+      title="Hilfe zu Snapshots"
+      subtitle="Kurzer Ueberblick ueber die wichtigsten Funktionen."
+      :items="helpOverlayItems"
+      aria-label="Hilfe Snapshots"
+      @close="closeHelpOverlay"
+    />
+  </template>
+</section>
