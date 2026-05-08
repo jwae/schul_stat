@@ -1162,6 +1162,49 @@ function parseDelimitedLine(line, delimiter = ",") {
   return values.map((value) => String(value || "").trim());
 }
 
+function normalizeCsvHeaderKey(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/["']/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function findCsvHeaderIndex(headerCells, aliases) {
+  const normalizedAliases = aliases.map((alias) => normalizeCsvHeaderKey(alias));
+  return headerCells.findIndex((cell) => normalizedAliases.includes(cell));
+}
+
+function detectCsvDelimiter(line) {
+  const text = String(line || "");
+  let inQuotes = false;
+  let semicolonCount = 0;
+  let commaCount = 0;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (char === "\"") {
+      if (inQuotes && next === "\"") {
+        i += 1;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (inQuotes) continue;
+    if (char === ";") semicolonCount += 1;
+    if (char === ",") commaCount += 1;
+  }
+
+  return semicolonCount > commaCount ? ";" : ",";
+}
+
 function parseSchoolSourceCsv(csvText) {
   const normalizedText = String(csvText || "").replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   const lines = normalizedText
@@ -1175,21 +1218,29 @@ function parseSchoolSourceCsv(csvText) {
     throw error;
   }
 
-  const headerCells = parseDelimitedLine(lines[0]).map((cell) => cell.toLowerCase().replace(/[)\s]+/g, ""));
-  const requiredHeaders = ["db_host", "db_port", "db_name", "db_user", "db_passwd", "snr"];
+  const delimiter = detectCsvDelimiter(lines[0]);
+  const headerCells = parseDelimitedLine(lines[0], delimiter).map((cell) => normalizeCsvHeaderKey(cell));
+  const headerDefinitions = [
+    { key: "db_host", aliases: ["db_host", "dbhost", "host"] },
+    { key: "db_port", aliases: ["db_port", "dbport", "port"] },
+    { key: "db_name", aliases: ["db_name", "dbname", "datenbank"] },
+    { key: "db_user", aliases: ["db_user", "dbuser", "user", "benutzer"] },
+    { key: "db_passwd", aliases: ["db_passwd", "db_password_enc", "db_password", "passwort"] },
+    { key: "snr", aliases: ["snr"] },
+  ];
   const headerIndex = new Map();
-  for (const header of requiredHeaders) {
-    const index = headerCells.findIndex((cell) => cell === header);
+  for (const definition of headerDefinitions) {
+    const index = findCsvHeaderIndex(headerCells, definition.aliases);
     if (index < 0) {
-      const error = new Error(`Die CSV-Datei enthaelt nicht die erforderliche Spalte ${header}.`);
+      const error = new Error(`Die CSV-Datei enthaelt nicht die erforderliche Spalte ${definition.key}.`);
       error.statusCode = 400;
       throw error;
     }
-    headerIndex.set(header, index);
+    headerIndex.set(definition.key, index);
   }
 
   return lines.slice(1).map((line, rowIndex) => {
-    const cells = parseDelimitedLine(line);
+    const cells = parseDelimitedLine(line, delimiter);
     return {
       row_no: rowIndex + 2,
       snr: String(cells[headerIndex.get("snr")] || "").trim(),
@@ -1222,28 +1273,37 @@ function parseSchoolCsv(csvText) {
     throw error;
   }
 
-  const headerCells = parseDelimitedLine(lines[0]).map((cell) => cell.toLowerCase().replace(/[)\s]+/g, ""));
-  const requiredHeaders = ["snr", "name", "city"];
-  const headerIndex = new Map();
-  for (const header of requiredHeaders) {
-    const index = headerCells.findIndex((cell) => cell === header);
-    if (index < 0) {
-      const error = new Error(`Die CSV-Datei enthaelt nicht die erforderliche Spalte ${header}.`);
-      error.statusCode = 400;
-      throw error;
-    }
-    headerIndex.set(header, index);
+  const delimiter = detectCsvDelimiter(lines[0]);
+  const headerCells = parseDelimitedLine(lines[0], delimiter).map((cell) => normalizeCsvHeaderKey(cell));
+  const snrIndex = findCsvHeaderIndex(headerCells, ["snr"]);
+  const nameIndex = findCsvHeaderIndex(headerCells, ["name"]);
+  const cityIndex = findCsvHeaderIndex(headerCells, ["city", "ort"]);
+
+  if (snrIndex < 0) {
+    const error = new Error("Die CSV-Datei enthaelt nicht die erforderliche Spalte snr.");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (nameIndex < 0) {
+    const error = new Error("Die CSV-Datei enthaelt nicht die erforderliche Spalte name.");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (cityIndex < 0) {
+    const error = new Error("Die CSV-Datei enthaelt nicht die erforderliche Spalte city oder ort.");
+    error.statusCode = 400;
+    throw error;
   }
 
-  const formIndex = headerCells.findIndex((cell) => cell === "school_form" || cell === "schulform");
+  const formIndex = findCsvHeaderIndex(headerCells, ["school_form", "schulform"]);
 
   return lines.slice(1).map((line, rowIndex) => {
-    const cells = parseDelimitedLine(line);
+    const cells = parseDelimitedLine(line, delimiter);
     return {
       row_no: rowIndex + 2,
-      snr: String(cells[headerIndex.get("snr")] || "").trim(),
-      name: String(cells[headerIndex.get("name")] || "").trim(),
-      city: String(cells[headerIndex.get("city")] || "").trim(),
+      snr: String(cells[snrIndex] || "").trim(),
+      name: String(cells[nameIndex] || "").trim(),
+      city: String(cells[cityIndex] || "").trim(),
       school_form: formIndex >= 0 ? String(cells[formIndex] || "").trim() : "",
     };
   }).filter((entry) => entry.snr || entry.name || entry.city);
@@ -2586,7 +2646,11 @@ function createAuthModule(poolProvider) {
       return res.status(409).json({ error: "Ein Eintrag mit diesen Schluesseldaten existiert bereits." });
     }
     console.error(error);
-    return res.status(500).json({ error: fallbackMessage });
+    const technicalMessage =
+      String(error?.sqlMessage || "").trim()
+      || String(error?.message || "").trim()
+      || fallbackMessage;
+    return res.status(500).json({ error: technicalMessage });
   }
 
   async function updateLastLogin(userId) {
@@ -3043,7 +3107,11 @@ function createAuthModule(poolProvider) {
 
       const csvText = String(req.body?.csv_text || "");
       const overwriteExisting = toFlag(req.body?.overwrite_existing, 0) === 1;
-      const rows = parseSchoolCsv(csvText);
+      const selectedRowNos = Array.isArray(req.body?.selected_row_nos)
+        ? req.body.selected_row_nos.map((value) => Number(value || 0)).filter((value) => value > 0)
+        : [];
+      const selectedRowSet = selectedRowNos.length ? new Set(selectedRowNos) : null;
+      const rows = parseSchoolCsv(csvText).filter((row) => !selectedRowSet || selectedRowSet.has(Number(row.row_no || 0)));
       if (!rows.length) {
         const error = new Error("Die CSV-Datei enthaelt keine importierbaren Zeilen.");
         error.statusCode = 400;
@@ -3078,11 +3146,19 @@ function createAuthModule(poolProvider) {
         let schoolFormId = null;
         if (schoolForm) {
           const [formRows] = await conn.query(
-            "SELECT school_form_id FROM school_form WHERE code = ? OR name = ? LIMIT 1",
-            [schoolForm, schoolForm]
+            `
+            SELECT school_form_id
+            FROM school_form
+            WHERE code = ? OR name = ? OR sf_kurz = ?
+            LIMIT 1
+            `,
+            [schoolForm, schoolForm, schoolForm]
           );
           if (formRows && formRows.length > 0) {
             schoolFormId = formRows[0].school_form_id;
+          } else {
+            invalidRows.push(`Zeile ${row.row_no}: Schulform "${schoolForm}" wurde nicht in school_form gefunden.`);
+            continue;
           }
         }
 
@@ -3108,13 +3184,12 @@ function createAuthModule(poolProvider) {
       const existingEntries = [];
       for (const row of preparedRows) {
         const [existingRows] = await conn.query(
-          "SELECT school_id, snr, name, city, school_form_id FROM school WHERE snr = ? LIMIT 1",
+          "SELECT snr, name, city, school_form_id FROM school WHERE snr = ? LIMIT 1",
           [row.snr]
         );
         const existing = existingRows?.[0] || null;
         if (existing) {
           existingEntries.push({
-            school_id: Number(existing.school_id || 0),
             snr: String(existing.snr || "").trim(),
             name: row.name,
             city: row.city,
@@ -3140,7 +3215,7 @@ function createAuthModule(poolProvider) {
 
       for (const row of preparedRows) {
         const [existingRows] = await conn.query(
-          "SELECT school_id FROM school WHERE snr = ? LIMIT 1",
+          "SELECT snr FROM school WHERE snr = ? LIMIT 1",
           [row.snr]
         );
         const existing = existingRows?.[0] || null;
@@ -3149,9 +3224,9 @@ function createAuthModule(poolProvider) {
             `
             UPDATE school
             SET name = ?, city = ?, school_form_id = ?
-            WHERE school_id = ?
+            WHERE snr = ?
             `,
-            [row.name, row.city, row.school_form_id, Number(existing.school_id || 0)]
+            [row.name, row.city, row.school_form_id, row.snr]
           );
           updatedCount += 1;
           updatedEntries.push({
@@ -3456,6 +3531,39 @@ function createAuthModule(poolProvider) {
       res.json(await fetchAdminBootstrap());
     } catch (error) {
       return adminErrorResponse(res, error, "Die Schulserver-Quelle konnte nicht geloescht werden.");
+    } finally {
+      conn.release();
+    }
+  });
+
+  router.delete("/admin/schools", authenticateToken, requireAdmin, async (req, res) => {
+    const conn = await getPool().getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const [snapshotRows] = await conn.query(
+        `
+        SELECT DISTINCT snap_id
+        FROM snapshot
+        WHERE snap_id IS NOT NULL AND snap_id <> ''
+        `,
+      );
+      const snapIds = (snapshotRows || [])
+        .map((row) => String(row?.snap_id || "").trim())
+        .filter(Boolean);
+
+      await conn.query("DELETE FROM snapshot");
+      if (snapIds.length) {
+        await cleanupUnusedSnapRuns(conn, snapIds);
+      }
+      await conn.query("DELETE FROM school_source_db");
+      await conn.query("DELETE FROM school");
+
+      await conn.commit();
+      res.json(await fetchAdminBootstrap());
+    } catch (error) {
+      await conn.rollback().catch(() => {});
+      return adminErrorResponse(res, error, "Die Schulen konnten nicht geloescht werden.");
     } finally {
       conn.release();
     }

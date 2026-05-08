@@ -7,7 +7,7 @@
     <section class="user-management-panel school-management-form-card">
       <div class="user-management-panel-head">
         <div class="school-management-form-title-block">
-          <h3>{{ selectedManagementSchoolSourceId ? "Schulserver-Quelle aendern" : "Neue Schulserver-Quelle" }}</h3>
+          <h3>{{ selectedManagementSchoolSourceId ? "Schulserver-Quelle aendern" : "Neue Schule hinzufuegen" }}</h3>
           <p>Pro Schule wird genau eine Quelle fuer den Snapshot-Abruf gepflegt.</p>
         </div>
         <div class="school-management-form-actions">
@@ -29,6 +29,14 @@
           </button>
         </div>
       </div>
+
+      <input
+        ref="schoolTableImportInput"
+        type="file"
+        accept=".csv,text/csv"
+        class="school-management-import-input"
+        @change="handleSchoolTableImportFileSelected"
+      />
 
       <div class="user-management-form-grid school-management-form-grid">
         <label class="field-block">
@@ -97,6 +105,31 @@
         >
           Zugangsdaten pruefen
         </button>
+        <div class="school-management-inline-actions-right">
+          <button
+            class="btn-secondary school-management-import-info-button"
+            type="button"
+            @click="openImportInfoOverlay"
+          >
+            ? Info zum Import
+          </button>
+          <button
+            class="btn-secondary"
+            type="button"
+            @click="openSchoolTableImportPicker"
+            :disabled="managementSaving"
+          >
+            Schulen importieren
+          </button>
+          <button
+            class="btn-secondary school-management-delete-all"
+            type="button"
+            @click="deleteAllManagementSchools"
+            :disabled="managementSaving || !managementSchools.length"
+          >
+            Alle Schulen loeschen
+          </button>
+        </div>
       </div>
 
       <transition name="feedback-fade" mode="out-in">
@@ -118,7 +151,7 @@
     <section class="user-management-list-card school-management-table-card">
       <div class="user-management-panel-head">
         <div>
-          <h3>Alle Dashboard-Schulen</h3>
+          <h3>Liste der Schulserver</h3>
           <p>Mit SNR, gekuerztem Schulnamen, Ort, Host und Status.</p>
         </div>
         <div class="school-management-table-head-actions">
@@ -132,18 +165,18 @@
           <button
             class="btn-secondary school-management-table-head-action"
             type="button"
-            @click="openSchoolImportPicker"
-            :disabled="managementSaving"
-          >
-            Serverliste importieren
-          </button>
-          <button
-            class="btn-secondary school-management-table-head-action"
-            type="button"
             @click="testAllManagementSchoolSources"
             :disabled="managementSaving"
           >
             Verbindungen testen
+          </button>
+          <button
+            class="btn-secondary school-management-table-head-action"
+            type="button"
+            @click="openSchoolImportPicker"
+            :disabled="managementSaving"
+          >
+            Schulserver importieren
           </button>
           <button
             class="btn-secondary school-management-table-head-action school-management-delete-all"
@@ -151,7 +184,7 @@
             @click="deleteAllManagementSchoolSources"
             :disabled="managementSaving || !managementSchoolSources.length"
           >
-            Alle Schulen loeschen
+            Alle Schulserver loeschen
           </button>
         </div>
       </div>
@@ -312,6 +345,117 @@
     </div>
 
     <div
+      v-if="schoolTableImportPreviewModalOpen"
+      class="school-management-modal-overlay"
+      @click.self="closeSchoolTableImportPreview"
+    >
+      <section class="school-management-modal school-management-school-import-preview-modal" role="dialog" aria-modal="true" aria-label="CSV-Vorschau Schulen">
+        <div class="school-management-modal-head">
+          <div>
+            <h3>CSV-Vorschau (Schulen)</h3>
+            <p>Die Datei <strong>{{ schoolTableImportFileName }}</strong> enthaelt {{ schoolTableImportPreviewData.length }} gueltige Zeile(n).</p>
+          </div>
+          <button class="btn-secondary" type="button" @click="closeSchoolTableImportPreview" :disabled="managementSaving">
+            Schliessen
+          </button>
+        </div>
+
+        <div class="school-management-import-preview-options">
+          <label
+            class="school-management-import-overwrite-toggle"
+            :title="schoolTableImportOverwriteExisting
+              ? 'Ein = Importiere alle Schulen mit Haekchen und ueberschreibe vorhandene'
+              : 'Aus = Importiere nur neue Schulen mit Haekchen'"
+          >
+            <input
+              v-model="schoolTableImportOverwriteExisting"
+              type="checkbox"
+              class="school-management-import-overwrite-toggle-input"
+              :disabled="managementSaving"
+            />
+            <span class="school-management-import-overwrite-toggle-switch" aria-hidden="true"></span>
+            <span class="school-management-import-overwrite-toggle-label">Daten ueberschreiben</span>
+          </label>
+        </div>
+
+        <transition name="feedback-fade" mode="out-in">
+          <div
+            v-if="localFeedbackError"
+            class="feedback-panel feedback-panel-error school-management-modal-feedback"
+          >
+            <p class="error">{{ localFeedbackError }}</p>
+          </div>
+          <div
+            v-else-if="localFeedbackNotice"
+            class="feedback-panel feedback-panel-success school-management-modal-feedback"
+          >
+            <p>{{ localFeedbackNotice }}</p>
+          </div>
+        </transition>
+
+        <div class="school-management-modal-list">
+          <table class="school-management-modal-table">
+            <thead>
+              <tr>
+                <th>
+                  <button
+                    class="school-management-import-select-all"
+                    type="button"
+                    @click="selectAllSchoolTableImportRows"
+                    :disabled="managementSaving"
+                  >
+                    Import
+                  </button>
+                </th>
+                <th>Zeile</th>
+                <th>SNR</th>
+                <th>Name</th>
+                <th>Ort</th>
+                <th>Schulform</th>
+                <th>Vorhanden</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in schoolTableImportPreviewData"
+                :key="`school-table-import-preview-${row.row_no}-${row.snr}`"
+                class="school-management-modal-row school-management-import-preview-row"
+              >
+                <td>
+                  <input v-model="row.selected" type="checkbox" :disabled="managementSaving" />
+                </td>
+                <td>{{ row.row_no }}</td>
+                <td>{{ row.snr || "-" }}</td>
+                <td :title="row.name || '-'">{{ row.name || "-" }}</td>
+                <td>{{ row.city || "-" }}</td>
+                <td>{{ row.school_form || "-" }}</td>
+                <td>
+                  <span class="user-management-state" :class="row.exists ? 'is-active' : 'is-inactive'">
+                    {{ row.exists ? 'Ja' : 'Neu' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="school-management-modal-actions">
+          <button class="btn-secondary" type="button" @click="closeSchoolTableImportPreview" :disabled="managementSaving">
+            Abbrechen
+          </button>
+          <button
+            class="btn-primary"
+            type="button"
+            @click="confirmSchoolTableImport"
+            :disabled="managementSaving || !schoolTableImportPreviewData.some((row) => row?.selected)"
+          >
+            Import starten
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <div
       v-if="schoolImportPreviewModalOpen"
       class="school-management-modal-overlay"
       @click.self="cancelSchoolImport"
@@ -344,6 +488,21 @@
             <span class="school-management-import-overwrite-toggle-label">Daten ueberschreiben</span>
           </label>
         </div>
+
+        <transition name="feedback-fade" mode="out-in">
+          <div
+            v-if="localFeedbackError"
+            class="feedback-panel feedback-panel-error school-management-modal-feedback"
+          >
+            <p class="error">{{ localFeedbackError }}</p>
+          </div>
+          <div
+            v-else-if="localFeedbackNotice"
+            class="feedback-panel feedback-panel-success school-management-modal-feedback"
+          >
+            <p>{{ localFeedbackNotice }}</p>
+          </div>
+        </transition>
 
         <div class="school-management-modal-list">
           <table class="school-management-modal-table">
@@ -393,7 +552,7 @@
           </table>
         </div>
 
-        <div class="school-management-modal-filters" style="display: flex; justify-content: flex-end; gap: 0.5rem; padding: 1rem; border-top: 1px solid var(--border-color);">
+        <div class="school-management-modal-actions">
           <button class="btn-secondary" type="button" @click="cancelSchoolImport" :disabled="managementSaving">
             Abbrechen
           </button>
@@ -417,6 +576,87 @@
       aria-label="Hilfe Schulen"
       @close="closeHelpOverlay"
     />
+
+    <div
+      v-if="importInfoOverlayOpen"
+      class="school-management-modal-overlay"
+      @click.self="closeImportInfoOverlay"
+    >
+      <section class="school-management-modal school-management-import-info-modal" role="dialog" aria-modal="true" aria-label="Info zum Import">
+        <div class="school-management-modal-head">
+          <div>
+            <h3>Info zum Import</h3>
+            <p>Kurzer Ueberblick ueber den erwarteten Aufbau der CSV-Dateien.</p>
+          </div>
+          <button class="btn-secondary" type="button" @click="closeImportInfoOverlay">
+            Schliessen
+          </button>
+        </div>
+
+        <div class="school-management-import-info-grid">
+          <section class="school-management-import-info-card">
+            <h4>Schulen</h4>
+            <p>Pflichtspalten:</p>
+            <pre class="school-management-import-info-code">SNR;Name;Ort;Schulform</pre>
+            <p>`Ort` kann auch als `city` kommen, `Schulform` auch als `school_form`.</p>
+            <p>Beispiel:</p>
+            <pre class="school-management-import-info-code">123456;Goethe-Gymnasium;Koeln;GY</pre>
+          </section>
+
+          <section class="school-management-import-info-card">
+            <h4>Schulserver</h4>
+            <p>Pflichtspalten:</p>
+            <pre class="school-management-import-info-code">snr;db_host;db_port;db_name;db_user;db_passwd</pre>
+            <p>`db_password_enc` wird ebenfalls akzeptiert.</p>
+            <p>Beispiel:</p>
+            <pre class="school-management-import-info-code">123456;server.example.de;3306;svwsdb;svws_user;geheim</pre>
+          </section>
+        </div>
+
+        <div class="school-management-import-info-note">
+          <p>Als Trennzeichen werden `;` und `,` akzeptiert. Gross- und Kleinschreibung der Ueberschriften wird ignoriert.</p>
+        </div>
+      </section>
+    </div>
+
+    <div
+      v-if="deleteAllSchoolsConfirmOpen"
+      class="school-management-modal-overlay"
+      @click.self="closeDeleteAllSchoolsConfirm"
+    >
+      <section class="school-management-modal school-management-danger-modal" role="dialog" aria-modal="true" aria-label="Alle Schulen loeschen">
+        <div class="school-management-danger-hero">
+          <div class="school-management-danger-badge" aria-hidden="true">!</div>
+          <div>
+            <h3>Alle Schulen wirklich loeschen?</h3>
+            <p>Diese Aktion entfernt den kompletten Schulbestand aus der Verwaltung.</p>
+          </div>
+        </div>
+
+        <div class="school-management-danger-summary">
+          <strong>{{ managementSchools.length }} Schule(n)</strong>
+          <span>werden zusammen mit ihren Verknuepfungen entfernt.</span>
+        </div>
+
+        <div class="school-management-danger-list">
+          <p>Folgen dieser Aktion:</p>
+          <ul>
+            <li>Alle Eintraege aus `school` werden geloescht.</li>
+            <li>Alle Schulserver-Quellen werden entfernt.</li>
+            <li>Alle zugehoerigen Snapshots werden mit geloescht.</li>
+          </ul>
+        </div>
+
+        <div class="school-management-modal-actions">
+          <button class="btn-secondary" type="button" @click="closeDeleteAllSchoolsConfirm" :disabled="managementSaving">
+            Abbrechen
+          </button>
+          <button class="btn-primary school-management-danger-button" type="button" @click="confirmDeleteAllManagementSchools" :disabled="managementSaving">
+            {{ managementSaving ? "Loesche..." : "Endgueltig loeschen" }}
+          </button>
+        </div>
+      </section>
+    </div>
 
     <div
       v-if="importResultDialogOpen"

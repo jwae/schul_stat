@@ -26,6 +26,7 @@ const managementSaving = ref<boolean>(false);
 const loadingOverlayOpen = ref<boolean>(false);
 const currentActionLabel = ref<string>("");
 const schoolImportInput = ref<HTMLInputElement | null>(null);
+const schoolTableImportInput = ref<HTMLInputElement | null>(null);
 const selectedManagementSchoolSourceId = ref<string>("");
 const localFeedbackError = ref<string>("");
 const localFeedbackNotice = ref<string>("");
@@ -42,6 +43,13 @@ const schoolImportPreviewData = ref<any[]>([]);
 const schoolImportRawCsv = ref<string>("");
 const schoolImportFileName = ref<string>("");
 const schoolImportOverwriteExisting = ref<boolean>(false);
+const schoolTableImportPreviewModalOpen = ref<boolean>(false);
+const schoolTableImportPreviewData = ref<any[]>([]);
+const schoolTableImportFileName = ref<string>("");
+const schoolTableImportRawCsv = ref<string>("");
+const schoolTableImportOverwriteExisting = ref<boolean>(false);
+const deleteAllSchoolsConfirmOpen = ref<boolean>(false);
+const importInfoOverlayOpen = ref<boolean>(false);
 const schoolSourceForm = reactive({
   snr: "",
   db_host: "",
@@ -319,6 +327,14 @@ function closeHelpOverlay() {
   helpOverlayOpen.value = false;
 }
 
+function openImportInfoOverlay() {
+  importInfoOverlayOpen.value = true;
+}
+
+function closeImportInfoOverlay() {
+  importInfoOverlayOpen.value = false;
+}
+
 function openImportResultDialog(title: string, body: string) {
   importResultDialogTitle.value = String(title || "Import-Ergebnis").trim() || "Import-Ergebnis";
   importResultDialogBody.value = String(body || "").trim();
@@ -333,6 +349,107 @@ function closeImportResultDialog() {
 
 function openSchoolImportPicker() {
   schoolImportInput.value?.click();
+}
+
+function openSchoolTableImportPicker() {
+  schoolTableImportInput.value?.click();
+}
+
+function normalizeCsvHeaderKey(value: string) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/["']/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function findCsvHeaderIndex(headers: string[], aliases: string[]) {
+  const normalizedAliases = aliases.map((alias) => normalizeCsvHeaderKey(alias));
+  return headers.findIndex((header) => normalizedAliases.includes(header));
+}
+
+async function readCsvFileText(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const utf8Decoder = new TextDecoder("utf-8", { fatal: false });
+  const utf8Text = utf8Decoder.decode(buffer);
+
+  // Many CSV exports on Windows are cp1252/latin1 encoded. If UTF-8 decoding
+  // produced replacement characters, try a more suitable fallback.
+  if (utf8Text.includes("\uFFFD")) {
+    try {
+      return new TextDecoder("windows-1252", { fatal: false }).decode(buffer);
+    } catch {
+      return new TextDecoder("iso-8859-1", { fatal: false }).decode(buffer);
+    }
+  }
+
+  return utf8Text;
+}
+
+function detectCsvDelimiter(line: string) {
+  const text = String(line || "");
+  let inQuotes = false;
+  let semicolonCount = 0;
+  let commaCount = 0;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        i++;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (inQuotes) continue;
+    if (char === ";") semicolonCount++;
+    if (char === ",") commaCount++;
+  }
+
+  return semicolonCount > commaCount ? ";" : ",";
+}
+
+function parseCsvRows(csvText: string) {
+  const normalizedText = String(csvText || "").replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = normalizedText.split("\n").map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) throw new Error("Die CSV-Datei ist leer.");
+
+  const delimiter = detectCsvDelimiter(lines[0]);
+
+  function parseLine(line: string) {
+    const values = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === delimiter && !inQuotes) {
+        values.push(current);
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    values.push(current);
+    return values.map((value) => String(value || "").trim());
+  }
+
+  return {
+    lines,
+    headers: parseLine(lines[0]).map((header) => normalizeCsvHeaderKey(header)),
+    parseLine,
+  };
 }
 
 function selectSchoolForSource(school: any) {
@@ -414,9 +531,9 @@ watch([localFeedbackError, localFeedbackNotice], ([error, notice]) => {
   }, 3200);
 });
 
-watch(schoolSelectionModalOpen, (isOpen) => {
+watch([schoolSelectionModalOpen, schoolImportPreviewModalOpen, schoolTableImportPreviewModalOpen, importResultDialogOpen, deleteAllSchoolsConfirmOpen, importInfoOverlayOpen], ([isSelectionOpen, isSourceImportOpen, isSchoolImportOpen, isResultOpen, isDeleteConfirmOpen, isImportInfoOpen]) => {
   if (typeof document === "undefined") return;
-  document.body.style.overflow = isOpen ? "hidden" : "";
+  document.body.style.overflow = isSelectionOpen || isSourceImportOpen || isSchoolImportOpen || isResultOpen || isDeleteConfirmOpen || isImportInfoOpen ? "hidden" : "";
 });
 
 watch(
@@ -542,6 +659,53 @@ async function deleteAllManagementSchoolSources() {
   }
 }
 
+async function deleteAllManagementSchools() {
+  const totalSchools = props.managementSchools.length;
+  if (!totalSchools) {
+    emitFeedback("Es sind keine Schulen zum Loeschen vorhanden.", "");
+    return;
+  }
+  deleteAllSchoolsConfirmOpen.value = true;
+}
+
+function closeDeleteAllSchoolsConfirm() {
+  deleteAllSchoolsConfirmOpen.value = false;
+}
+
+async function confirmDeleteAllManagementSchools() {
+  const totalSchools = props.managementSchools.length;
+  if (!totalSchools) {
+    closeDeleteAllSchoolsConfirm();
+    emitFeedback("Es sind keine Schulen zum Loeschen vorhanden.", "");
+    return;
+  }
+
+  managementSaving.value = true;
+  emitFeedback("", "");
+
+  try {
+    const resp = await apiClient.delete("/api/auth/admin/schools", {
+      headers: managementAuthHeaders(),
+    });
+    const bootstrap = Array.isArray(resp.data?.schools)
+      ? (resp.data || {})
+      : await fetchManagementBootstrap();
+    closeDeleteAllSchoolsConfirm();
+    emit("bootstrap-updated", bootstrap);
+    emitFeedback("", `${totalSchools} Schule(n) geloescht.`);
+    resetSchoolSourceForm();
+  } catch (e: any) {
+    emitFeedback(
+      e?.response?.data?.error ||
+      e?.message ||
+      "Die Schulen konnten nicht geloescht werden.",
+      "",
+    );
+  } finally {
+    managementSaving.value = false;
+  }
+}
+
 async function testManagementSchoolSource() {
   const draftPayload = {
     db_host: String(schoolSourceForm.db_host || "").trim(),
@@ -628,43 +792,16 @@ async function handleSchoolImportFileSelected(event: Event) {
 
   try {
     schoolImportFileName.value = file.name;
-    const csvText = await file.text();
+    const csvText = await readCsvFileText(file);
     schoolImportRawCsv.value = csvText;
 
-    const normalizedText = String(csvText || "").replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-    const lines = normalizedText.split("\n").map(l => l.trim()).filter(Boolean);
-    if (!lines.length) throw new Error("Die CSV-Datei ist leer.");
-
-    const delimiter = lines[0].includes(";") ? ";" : ",";
-    function parseLine(line: string) {
-      const values = [];
-      let current = "";
-      let inQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') {
-          if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-          else { inQuotes = !inQuotes; }
-        } else if (char === delimiter && !inQuotes) {
-          values.push(current);
-          current = "";
-        } else {
-          current += char;
-        }
-      }
-      values.push(current);
-      return values.map(v => String(v || "").trim());
-    }
-
-    const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/[)\s]+/g, ""));
-    const snrIdx = headers.indexOf("snr");
-    const hostIdx = headers.indexOf("db_host");
-    const portIdx = headers.indexOf("db_port");
-    const nameIdx = headers.indexOf("db_name");
-    const userIdx = headers.indexOf("db_user");
-    const passwordIdx = headers.indexOf("db_passwd") >= 0
-      ? headers.indexOf("db_passwd")
-      : headers.indexOf("db_password_enc");
+    const { lines, headers, parseLine } = parseCsvRows(csvText);
+    const snrIdx = findCsvHeaderIndex(headers, ["snr"]);
+    const hostIdx = findCsvHeaderIndex(headers, ["db_host", "dbhost", "host"]);
+    const portIdx = findCsvHeaderIndex(headers, ["db_port", "dbport", "port"]);
+    const nameIdx = findCsvHeaderIndex(headers, ["db_name", "dbname", "datenbank"]);
+    const userIdx = findCsvHeaderIndex(headers, ["db_user", "dbuser", "user", "benutzer"]);
+    const passwordIdx = findCsvHeaderIndex(headers, ["db_passwd", "db_password_enc", "db_password", "passwort"]);
 
     if (snrIdx < 0) throw new Error("Die CSV-Datei enthaelt nicht die erforderliche Spalte 'snr'.");
     if (hostIdx < 0 || nameIdx < 0) throw new Error("Die CSV-Datei enthaelt nicht die erforderlichen Spalten 'db_host' und 'db_name'.");
@@ -695,6 +832,153 @@ async function handleSchoolImportFileSelected(event: Event) {
     emitFeedback(e?.message || "Fehler beim Lesen der CSV-Datei.", "");
   } finally {
     if (input) input.value = "";
+  }
+}
+
+async function handleSchoolTableImportFileSelected(event: Event) {
+  const input = event.target as HTMLInputElement | null;
+  const file = input?.files?.[0] || null;
+  if (!file) return;
+
+  try {
+    schoolTableImportFileName.value = file.name;
+    const csvText = await readCsvFileText(file);
+    schoolTableImportRawCsv.value = csvText;
+    const { lines, headers, parseLine } = parseCsvRows(csvText);
+    const snrIdx = findCsvHeaderIndex(headers, ["snr"]);
+    const nameIdx = findCsvHeaderIndex(headers, ["name"]);
+    const cityIdx = findCsvHeaderIndex(headers, ["ort", "city"]);
+    const schoolFormIdx = findCsvHeaderIndex(headers, ["schulform", "school_form"]);
+
+    if (snrIdx < 0 || nameIdx < 0 || cityIdx < 0 || schoolFormIdx < 0) {
+      throw new Error("Die CSV-Datei muss die Spalten 'SNR', 'Name', 'Ort/city' und 'schulform/school_form' enthalten.");
+    }
+
+    schoolTableImportPreviewData.value = lines.slice(1).map((line, index) => {
+      const cells = parseLine(line);
+      return {
+        row_no: index + 2,
+        snr: cells[snrIdx] || "",
+        name: cells[nameIdx] || "",
+        city: cells[cityIdx] || "",
+        school_form: cells[schoolFormIdx] || "",
+        exists: props.managementSchools.some((school) => String(school?.snr || "").trim() === String(cells[snrIdx] || "").trim()),
+        selected: true,
+      };
+    }).filter((row) => row.snr || row.name || row.city || row.school_form);
+
+    if (!schoolTableImportPreviewData.value.length) {
+      throw new Error("Keine importierbaren Zeilen gefunden.");
+    }
+
+    schoolTableImportPreviewModalOpen.value = true;
+  } catch (e: any) {
+    emitFeedback(e?.message || "Fehler beim Lesen der Schul-CSV-Datei.", "");
+  } finally {
+    if (input) input.value = "";
+  }
+}
+
+function closeSchoolTableImportPreview() {
+  schoolTableImportPreviewModalOpen.value = false;
+  schoolTableImportPreviewData.value = [];
+  schoolTableImportFileName.value = "";
+  schoolTableImportRawCsv.value = "";
+  schoolTableImportOverwriteExisting.value = false;
+}
+
+function selectAllSchoolTableImportRows() {
+  const shouldSelectAll = schoolTableImportPreviewData.value.some((row) => !row?.selected);
+  for (const row of schoolTableImportPreviewData.value) {
+    row.selected = shouldSelectAll;
+  }
+}
+
+async function confirmSchoolTableImport() {
+  managementSaving.value = true;
+  emitFeedback("", "");
+
+  try {
+    const selectedPreviewRows = schoolTableImportPreviewData.value.filter((row) => !!row?.selected);
+    if (!selectedPreviewRows.length) {
+      throw new Error("Bitte mindestens eine Zeile fuer den Import auswaehlen.");
+    }
+
+    const rowsForImport = schoolTableImportOverwriteExisting.value
+      ? selectedPreviewRows
+      : selectedPreviewRows.filter((row) => !row?.exists);
+    if (!rowsForImport.length) {
+      throw new Error("Mit deaktiviertem Ueberschreiben koennen nur neue ausgewaehlte Schulen importiert werden.");
+    }
+
+    const response = await apiClient.post(
+      "/api/auth/admin/schools/import-csv",
+      {
+        csv_text: schoolTableImportRawCsv.value,
+        overwrite_existing: schoolTableImportOverwriteExisting.value,
+        selected_row_nos: rowsForImport.map((row) => Number(row?.row_no || 0)).filter((rowNo) => rowNo > 0),
+      },
+      { headers: managementAuthHeaders() },
+    );
+
+    const bootstrap = Array.isArray(response.data?.schools)
+      ? (response.data || {})
+      : await fetchManagementBootstrap();
+    emit("bootstrap-updated", bootstrap);
+
+    const createdEntries = Array.isArray(response.data?.created_entries) ? response.data.created_entries : [];
+    const updatedEntries = Array.isArray(response.data?.updated_entries) ? response.data.updated_entries : [];
+    const resultLines = [
+      `CSV-Datei: ${schoolTableImportFileName.value}`,
+      `Importiert gesamt: ${Number(response.data?.imported_count || 0)}`,
+      `Neu angelegt: ${Number(response.data?.created_count || 0)}`,
+      `Aktualisiert: ${Number(response.data?.updated_count || 0)}`,
+    ];
+
+    if (createdEntries.length) {
+      resultLines.push("");
+      resultLines.push("Neu angelegt:");
+      for (const entry of createdEntries) {
+        resultLines.push(
+          `${String(entry?.snr || "").trim()} | ${String(entry?.name || "").trim()} | ${String(entry?.city || "").trim()}`,
+        );
+      }
+    }
+
+    if (updatedEntries.length) {
+      resultLines.push("");
+      resultLines.push("Aktualisiert:");
+      for (const entry of updatedEntries) {
+        resultLines.push(
+          `${String(entry?.snr || "").trim()} | ${String(entry?.name || "").trim()} | ${String(entry?.city || "").trim()}`,
+        );
+      }
+    }
+
+    closeSchoolTableImportPreview();
+    openImportResultDialog("CSV-Import (Schulen) abgeschlossen", resultLines.join("\n"));
+    emitFeedback(
+      "",
+      `${Number(response.data?.imported_count || 0)} Schule(n) importiert. Neu: ${Number(response.data?.created_count || 0)}, aktualisiert: ${Number(response.data?.updated_count || 0)}.`,
+    );
+  } catch (e: any) {
+    if (e?.response?.status === 409 && e?.response?.data?.needs_confirmation) {
+      schoolTableImportOverwriteExisting.value = true;
+      const existingSnrs = new Set(
+        (Array.isArray(e.response.data?.existing_entries) ? e.response.data.existing_entries : [])
+          .map((entry: any) => String(entry?.snr || "").trim())
+          .filter(Boolean),
+      );
+      for (const row of schoolTableImportPreviewData.value) {
+        row.exists = existingSnrs.has(String(row?.snr || "").trim());
+      }
+      emitFeedback("", e?.response?.data?.message || "Einige Schulen sind bereits vorhanden. Zum Ueberschreiben bitte erneut importieren.");
+      return;
+    }
+
+    emitFeedback(e?.response?.data?.error || e?.message || "Der CSV-Import der Schulen ist fehlgeschlagen.", "");
+  } finally {
+    managementSaving.value = false;
   }
 }
 

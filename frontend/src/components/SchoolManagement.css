@@ -166,6 +166,15 @@ button:disabled {
   align-items: center;
 }
 
+.school-management-inline-actions-right {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
 .user-management-state {
   padding: 3px 8px;
   border-radius: 999px;
@@ -244,6 +253,17 @@ button:disabled {
 .school-management-help-button:hover {
   border-color: #7ea7de;
   background: #eaf2ff;
+}
+
+.school-management-import-info-button {
+  border-color: #b7c8e7;
+  background: #f7faff;
+  color: #24446f;
+}
+
+.school-management-import-info-button:hover:not(:disabled) {
+  border-color: #93afd7;
+  background: #edf4ff;
 }
 
 .school-management-delete-all {
@@ -525,12 +545,30 @@ button:disabled {
   min-height: 0;
   overflow: auto;
   padding-right: 4px;
+  position: relative;
+  z-index: 1;
 }
 
 .school-management-import-preview-options {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+}
+
+.school-management-modal-feedback {
+  margin: 0;
+  white-space: pre-wrap;
+  position: relative;
+  z-index: 3;
+  box-shadow: 0 10px 24px rgba(18, 45, 88, 0.08);
+}
+
+.school-management-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid #dbe4f0;
 }
 
 .school-management-import-overwrite-toggle {
@@ -677,6 +715,158 @@ button:disabled {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+.school-management-import-info-modal {
+  width: min(760px, 100%);
+  max-height: min(78vh, 760px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.school-management-import-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  min-height: 0;
+}
+
+.school-management-import-info-card {
+  padding: 14px 16px;
+  border: 1px solid #dbe4f0;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.school-management-import-info-card h4 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: #173252;
+}
+
+.school-management-import-info-card p {
+  margin: 0 0 8px;
+  color: #51657f;
+  line-height: 1.45;
+}
+
+.school-management-import-info-code {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #dbe4f0;
+  background: #f6f9ff;
+  color: #1e3555;
+  font: 12px/1.45 "Consolas", "Courier New", monospace;
+  white-space: pre-wrap;
+}
+
+.school-management-import-info-note {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #dbe4f0;
+  background: #f8fbff;
+  color: #51657f;
+}
+
+.school-management-import-info-note p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.school-management-danger-modal {
+  width: min(560px, 100%);
+  max-height: none;
+  grid-template-rows: auto auto auto;
+  gap: 16px;
+  border-color: #f0c7cb;
+  background: linear-gradient(180deg, #fffefe 0%, #fff7f7 100%);
+}
+
+.school-management-danger-hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.school-management-danger-hero h3 {
+  margin: 0 0 4px;
+  font-size: 21px;
+  color: #7d1f28;
+}
+
+.school-management-danger-hero p {
+  margin: 0;
+  color: #7c4d54;
+  line-height: 1.45;
+}
+
+.school-management-danger-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #ffdbde 0%, #ffc7cc 100%);
+  color: #9f2430;
+  font-size: 26px;
+  font-weight: 800;
+  box-shadow: inset 0 0 0 1px rgba(159, 36, 48, 0.12);
+}
+
+.school-management-danger-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  padding: 12px 14px;
+  border: 1px solid #f3d7da;
+  border-radius: 14px;
+  background: #fff;
+  color: #6a3f45;
+}
+
+.school-management-danger-summary strong {
+  font-size: 18px;
+  color: #9f2430;
+}
+
+.school-management-danger-list {
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #f3d7da;
+  color: #5d4c50;
+}
+
+.school-management-danger-list p {
+  margin: 0 0 8px;
+  font-weight: 700;
+  color: #7d1f28;
+}
+
+.school-management-danger-list ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.school-management-danger-list li + li {
+  margin-top: 6px;
+}
+
+.school-management-danger-button {
+  background: #c73d4a;
+  border-color: #c73d4a;
+}
+
+.school-management-danger-button:hover:not(:disabled) {
+  background: #ac2a37;
+  border-color: #ac2a37;
+}
+
+.school-management-school-import-preview-modal {
+  width: min(860px, 100%);
+}
+
 .school-management-import-result-body {
   margin: 0;
   min-height: 0;
@@ -705,6 +895,10 @@ button:disabled {
   }
 
   .school-management-modal-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .school-management-import-info-grid {
     grid-template-columns: 1fr;
   }
 }
