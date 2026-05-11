@@ -1,0 +1,12 @@
+<nav class="tabs">
+  <button
+    v-for="tab in tabs"
+    :key="tab.key"
+    class="tab"
+    :class="{ active: modelValue === tab.key }"
+    type="button"
+    @click="selectTab(tab.key)"
+  >
+    {{ tab.label }}
+  </button>
+</nav>

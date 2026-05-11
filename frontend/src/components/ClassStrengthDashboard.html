@@ -1,0 +1,80 @@
+<section class="card">
+  <div class="row">
+    <h2>Klassenstaerken je Schule (Matrix)</h2>
+
+    <div class="row-right">
+      <label class="inline">
+        Untergrenze einfaerben
+        <input
+          :value="lowerThreshold"
+          type="number"
+          min="1"
+          :max="Math.max(1, (upperThreshold || 0) - 1)"
+          class="threshold-input threshold-low"
+          @input="updateLowerThreshold"
+        />
+      </label>
+
+      <label class="inline">
+        Obergrenze einfaerben
+        <input
+          :value="upperThreshold"
+          type="number"
+          :min="(lowerThreshold || 0) + 1"
+          max="45"
+          class="threshold-input threshold-high"
+          @input="updateUpperThreshold"
+        />
+      </label>
+    </div>
+  </div>
+
+  <div v-if="error" class="error">{{ error }}</div>
+
+  <div v-if="!classRowsCount" class="hint">
+    Keine Klassendaten fuer die aktuelle Auswahl.
+  </div>
+
+  <div v-else class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th class="col-city">Ort</th>
+          <th class="col-snr">SNR</th>
+          <th class="name">Schule</th>
+          <th v-for="classCode in classCodes" :key="classCode" class="num" :title="classCode">
+            {{ getClassHeaderLabel(classCode) }}
+          </th>
+          <th class="num total">Summe</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        <tr v-for="school in schoolsInClassMatrix" :key="school.snr">
+          <td class="col-city">{{ school.city || "-" }}</td>
+          <td class="col-snr">{{ school.snr }}</td>
+          <td class="name" :title="school.name">{{ school.name || "-" }}</td>
+          <td
+            v-for="classCode in classCodes"
+            :key="school.snr + '-' + classCode"
+            class="num"
+            :class="classCellClass(getClassStudents(school.snr, classCode))"
+          >
+            {{ getClassStudents(school.snr, classCode) }}
+          </td>
+          <td class="num total"><b>{{ totalForSchool(school.snr) }}</b></td>
+        </tr>
+      </tbody>
+
+      <tfoot>
+        <tr>
+          <td colspan="3"><b>Summe</b></td>
+          <td v-for="classCode in classCodes" :key="'sum-' + classCode" class="num total-cell">
+            <b>{{ totalForClass(classCode) }}</b>
+          </td>
+          <td class="num total">{{ grandTotalClasses }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</section>

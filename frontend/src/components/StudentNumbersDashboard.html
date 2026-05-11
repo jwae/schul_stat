@@ -1,0 +1,68 @@
+<section class="card">
+  <div class="row">
+    <h2>Schuelerzahlen</h2>
+  </div>
+
+  <div v-if="!selectedSnapshot" class="hint">
+    Bitte Snapshot waehlen.
+  </div>
+
+  <div v-else-if="loading" class="hint">
+    Lade Schuelerzahlen...
+  </div>
+
+  <div v-else-if="error" class="error">
+    {{ error }}
+  </div>
+
+  <div v-else-if="!schoolTrendSeriesCount" class="hint">
+    Keine Schuelerzahl-Trends fuer die aktuelle Auswahl.
+  </div>
+
+  <div v-else class="overview-grid">
+    <article class="overview-card overview-card-half">
+      <h3 class="overview-title-light">Schuelerzahlen je Schule und Abschnitt</h3>
+      <EChartPanel :option="schoolTrendChartOption" />
+    </article>
+
+    <article class="overview-card overview-card-half">
+      <h3 class="overview-title-light">Schuelerzahlen gesamt je Abschnitt</h3>
+      <EChartPanel :option="cumulativeSchoolTrendChartOption" />
+    </article>
+
+    <article class="overview-card overview-card-full">
+      <h3 class="overview-title-light">Schuelerzahlen je Schule und Abschnitt (Tabelle)</h3>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th class="col-snr">SNR</th>
+              <th class="name">Schule</th>
+              <th v-for="term in schoolTrendTerms" :key="'schuelerzahlen-term-' + term.termId" class="num">
+                {{ term.termLabel }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="school in schoolTrendSchools" :key="'schuelerzahlen-school-' + school.snr">
+              <td class="col-snr">{{ school.snr }}</td>
+              <td class="name" :title="school.name">{{ school.name || "-" }}</td>
+              <td
+                v-for="term in schoolTrendTerms"
+                :key="'schuelerzahlen-cell-' + school.snr + '-' + term.termId"
+                class="num"
+              >
+                {{ getSchoolTrendStudents(school.snr, term.termId) || "-" }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="overview-card overview-card-wide2">
+      <h3 class="overview-title-light">Entwicklung DAZ-Schueler (EF = 1)</h3>
+      <EChartPanel :option="efTrendChartOption" />
+    </article>
+  </div>
+</section>

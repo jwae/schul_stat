@@ -1,0 +1,60 @@
+<section class="card">
+  <div class="row">
+    <h2>Uebersicht</h2>
+  </div>
+
+  <div v-if="!selectedSnapshot" class="hint">
+    Bitte Snapshot waehlen.
+  </div>
+
+  <div v-else class="overview-grid">
+    <article class="overview-card">
+      <h3 class="overview-title-light">Gesamtschuelerzahl: {{ totalStudentsOverview }}</h3>
+      <EChartPanel :option="genderChartOption" />
+    </article>
+
+    <article class="overview-card">
+      <h3 class="overview-title-light">Jahrgaenge</h3>
+      <EChartPanel :option="gradeChartOption" />
+    </article>
+
+    <article class="overview-card">
+      <h3 class="overview-title-light">
+        Foerderbedarf: {{ specialNeedsOverview }} von {{ totalStudentsOverview }} SuS = {{ specialNeedsPercentOverview }}%
+      </h3>
+      <EChartPanel :option="supportChartOption" />
+    </article>
+
+    <article class="overview-card">
+      <h3 class="overview-title-light">
+        Erstfoerderung: {{ efOverview }} von {{ totalStudentsOverview }} SuS = {{ efPercentOverview }}%
+      </h3>
+      <EChartPanel :option="efChartOption" />
+    </article>
+
+    <article class="overview-card">
+      <h3 class="overview-title-light">Migrationshintergrund: {{ migrationPercentOverview }}%</h3>
+      <EChartPanel :option="migrationChartOption" />
+    </article>
+
+    <article class="overview-card">
+      <h3 class="overview-title-light">Staatsangehoerigkeiten: {{ nationalityPercentOverview }}% deutsch</h3>
+      <EChartPanel :option="nationalityChartOption" />
+    </article>
+
+    <article class="overview-card overview-card-half">
+      <h3 class="overview-title-light">Konfessionen</h3>
+      <EChartPanel :option="religionChartOption" />
+    </article>
+
+    <article class="overview-card overview-card-half">
+      <h3 class="overview-title-light">Anteil SuS in §132c: {{ hTrackPercentOverview }}%</h3>
+      <EChartPanel :option="educationTrackChartOption" />
+    </article>
+
+    <article class="overview-card overview-card-half">
+      <h3 class="overview-title-light">H (§132c an RS) je Jahrgang</h3>
+      <EChartPanel :option="hTrackGradeChartOption" />
+    </article>
+  </div>
+</section>

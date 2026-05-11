@@ -77,3 +77,10 @@ onBeforeUnmount(() => {
 <template>
   <div ref="containerEl" class="pie-chart"></div>
 </template>
+
+<style scoped>
+.pie-chart {
+  width: 100%;
+  height: 320px;
+}
+</style>

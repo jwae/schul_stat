@@ -1,0 +1,39 @@
+<section class="card">
+  <div class="row">
+    <h2>Lehrerdaten</h2>
+  </div>
+
+  <div v-if="!activeSnapshotSelection" class="hint">
+    Bitte Snapshot waehlen.
+  </div>
+
+  <div v-else-if="loading" class="hint">
+    Lade Lehrerdaten...
+  </div>
+
+  <div v-else-if="error" class="error">
+    {{ error }}
+  </div>
+
+  <div v-else class="overview-grid">
+    <article class="overview-card">
+      <h3 class="overview-title-light">Gesamtlehrerzahl: {{ totalTeachers }}</h3>
+      <EChartPanel :option="teacherSexChartOption" />
+    </article>
+
+    <article class="overview-card">
+      <h3 class="overview-title-light">Altersstruktur</h3>
+      <EChartPanel :option="teacherAgeChartOption" />
+    </article>
+
+    <article class="overview-card">
+      <h3 class="overview-title-light">Nationalitaet</h3>
+      <EChartPanel :option="teacherNationChartOption" />
+    </article>
+
+    <article class="overview-card overview-card-wide2">
+      <h3 class="overview-title-light">Wohnorte (Top 10)</h3>
+      <EChartPanel :option="teacherCityChartOption" />
+    </article>
+  </div>
+</section>

@@ -134,437 +134,107 @@
       </div>
     </header>
 
+    <DashboardFiltersPanel
+      v-model:snapshot-name-selection="snapshotNameSelection"
+      v-model:school-term-selection="schoolTermSelection"
+      v-model:selected-city="selectedCity"
+      v-model:selected-snr="selectedSnr"
+      :snapshot-name-options="snapshotNameOptions"
+      :school-term-options="schoolTermOptions"
+      :cities="cities"
+      :schools-filtered-for-dropdown="schoolsFilteredForDropdown"
+      :summary-items="dashboardSummaryItems"
+      :error-message="dashboardErrorMessage"
+    />
 
-
-  <section class="card">
-    <div class="controls-card">
-      <div class="controls">
-        <label class="filter-medium">
-          Snapshot
-          <select v-model="snapshotNameSelection" :disabled="!snapshotNameOptions.length">
-            <option value="" disabled>(bitte waehlen)</option>
-            <option
-              v-for="option in snapshotNameOptions"
-              :key="'snapshot-name-' + option.value"
-              :value="option.value"
-            >
-              {{ option.label }}
-            </option>
-          </select>
-        </label>
-
-        <label class="filter-term">
-          Schuljahr
-          <select v-model="schoolTermSelection" :disabled="!schoolTermOptions.length">
-            <option value="" disabled>(bitte waehlen)</option>
-            <option
-              v-for="option in schoolTermOptions"
-              :key="'term-' + option.value"
-              :value="option.value"
-            >
-              {{ option.label }}
-            </option>
-          </select>
-        </label>
-
-        <label class="filter-medium">
-          Ort
-          <select v-model="selectedCity">
-            <option value="">(alle)</option>
-            <option v-for="c in cities" :key="c" :value="c">
-              {{ c }}
-            </option>
-          </select>
-        </label>
-
-        <label class="filter-large">
-          Schule
-          <select v-model="selectedSnr">
-            <option value="">(alle)</option>
-            <option v-for="s in schoolsFilteredForDropdown" :key="s.snr" :value="s.snr">
-              {{ s.snr }} - {{ s.name }}
-            </option>
-          </select>
-        </label>
-      </div>
-    </div>
-
-      <div class="summary">
-
-      <template v-if="view === 'klassenstaerken'">
-        <div><b>Schulen:</b> {{ schoolsInClassMatrix.length }}</div>
-        <div><b>Klassen:</b> {{ classCodes.length }}</div>
-      </template>
-      <template v-if="view === 'daz'">
-        <div><b>Schulen:</b> {{ schoolsInDazMatrix.length }}</div>
-        <div><b>Klassen:</b> {{ dazClassCodes.length }}</div>
-      </template>
-      <template v-if="view === 'uebersicht'">
-        <div><b>Schulen:</b> {{ schoolsInOverviewSnapshot }}</div>
-        <div><b>Schüler:</b> {{ totalStudentsOverview }}</div>
-      </template>
-      <template v-if="view === 'schuelerzahlen'">
-        <div><b>Schulen:</b> {{ schoolsInOverviewSnapshot }}</div>
-        <div><b>Schüler:</b> {{ totalStudentsOverview }}</div>
-      </template>
-      <template v-if="view === 'lehrerdaten'">
-        <div><b>Schulen:</b> {{ teachersData?.schoolCount || 0 }}</div>
-        <div><b>Lehrer Gesamt:</b> {{ teachersData?.totalTeachers || 0 }}</div>
-      </template>
-    </div>
-
-    <div v-if="view === 'klassenstaerken' && errorClasses" class="error">{{ errorClasses }}</div>
-    <div v-if="view === 'uebersicht' && errorOverview" class="error">{{ errorOverview }}</div>
-    <div v-if="view === 'schuelerzahlen' && errorOverview" class="error">{{ errorOverview }}</div>
-  </section>
-
-  <nav class="tabs">
-    <button
-      v-if="canViewDashboard('uebersicht')"
-      class="tab"
-      :class="{ active: view === 'uebersicht' }"
-      @click="view = 'uebersicht'">
-      {{ dashboardLabel("uebersicht") }}
-    </button>
-    <button
-      v-if="canViewDashboard('schuelerzahlen')"
-      class="tab"
-      :class="{ active: view === 'schuelerzahlen' }"
-      @click="view = 'schuelerzahlen'">
-      {{ dashboardLabel("schuelerzahlen") }}
-    </button>
-    <button
-      v-if="canViewDashboard('klassenstaerken')"
-      class="tab"
-      :class="{ active: view === 'klassenstaerken' }"
-      @click="view = 'klassenstaerken'">
-      {{ dashboardLabel("klassenstaerken") }}
-    </button>
-    <button
-      v-if="canViewDashboard('daz')"
-      class="tab"
-      :class="{ active: view === 'daz' }"
-      @click="view = 'daz'">
-      {{ dashboardLabel("daz") }}
-    </button>
-    <button
-      v-if="canViewDashboard('lehrerdaten')"
-      class="tab"
-      :class="{ active: view === 'lehrerdaten' }"
-      @click="view = 'lehrerdaten'">
-      {{ dashboardLabel("lehrerdaten") }}
-    </button>
-  </nav>
+    <DashboardTabs
+      v-model="view"
+      :tabs="dashboardTabs"
+    />
 
   <!-- ===== Dashboard 1 ===== -->
   <!-- ===== Dashboard 2 ===== -->
-  <section v-if="view === 'klassenstaerken'" class="card">
-    <div class="row">
-      <h2>Klassenstaerken je Schule (Matrix)</h2>
-
-      <div class="row-right">
-
-        <label class="inline">
-          Untergrenze einfaerben
-          <input type="number" min="1" :max="upperThreshold - 1" v-model.number="lowerThreshold" class="threshold-input threshold-low" />
-        </label>
-
-        <label class="inline">
-          Obergrenze einfaerben
-          <input type="number" :min="lowerThreshold + 1" max="45" v-model.number="upperThreshold" class="threshold-input threshold-high" />
-        </label>
-
-      </div>
-
-
-
-    </div>
-
-    <div v-if="!classRows.length" class="hint">
-      Keine Klassendaten fuer die aktuelle Auswahl.
-    </div>
-
-    <div v-else class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th class="col-city">Ort</th>
-            <th class="col-snr">SNR</th>
-            <th class="name">Schule</th>
-
-            <th v-for="c in classCodes" :key="c" class="num" :title="c">{{ getClassHeaderLabel(c) }}</th>
-
-            <th class="num total">Summe</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          <tr v-for="s in schoolsInClassMatrix" :key="s.snr">
-            <td class="col-city">{{ s.city || "-" }}</td>
-            <td class="col-snr">{{ s.snr }}</td>
-            <td class="name" :title="s.name">{{ s.name || "-" }}</td>
-
-            <td v-for="c in classCodes" :key="s.snr + '-' + c" class="num"
-              :class="classCellClass(getClassStudents(s.snr, c))">
-              {{ getClassStudents(s.snr, c) }}
-            </td>
-
-            <td class="num total"><b>{{ totalForSchool(s.snr) }}</b></td>
-          </tr>
-        </tbody>
-
-        <tfoot>
-          <tr>
-            <td colspan="3"><b>Summe</b></td>
-
-            <td v-for="c in classCodes" :key="'sum-' + c" class="num total-cell">
-              <b>{{ totalForClass(c) }}</b>
-            </td>
-
-            <td class="num total">{{ grandTotalClasses }}</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  </section>
+  <ClassStrengthDashboard
+    v-if="view === 'klassenstaerken'"
+    v-model:lower-threshold="lowerThreshold"
+    v-model:upper-threshold="upperThreshold"
+    :class-codes="classCodes"
+    :class-rows-count="classRows.length"
+    :error="errorClasses"
+    :grand-total-classes="grandTotalClasses"
+    :schools-in-class-matrix="schoolsInClassMatrix"
+    :get-class-header-label="getClassHeaderLabel"
+    :get-class-students="getClassStudents"
+    :total-for-class="totalForClass"
+    :total-for-school="totalForSchool"
+    :class-cell-class="classCellClass"
+  />
 
   <!-- ===== Dashboard 4 Uebersicht ===== -->
-  <section v-if="view === 'uebersicht'" class="card">
-    <div class="row">
-      <h2>Uebersicht</h2>
-    </div>
+  <OverviewDashboard
+    v-if="view === 'uebersicht'"
+    :selected-snapshot="selectedSnapshotForOverview"
+    :total-students-overview="totalStudentsOverview"
+    :special-needs-overview="specialNeedsOverview"
+    :special-needs-percent-overview="specialNeedsPercentOverview"
+    :ef-overview="efOverview"
+    :ef-percent-overview="efPercentOverview"
+    :migration-percent-overview="migrationPercentOverview"
+    :nationality-percent-overview="nationalityPercentOverview"
+    :h-track-percent-overview="hTrackPercentOverview"
+    :gender-chart-option="genderChartOption"
+    :grade-chart-option="gradeChartOption"
+    :support-chart-option="supportChartOption"
+    :ef-chart-option="efChartOption"
+    :migration-chart-option="migrationChartOption"
+    :nationality-chart-option="nationalityChartOption"
+    :religion-chart-option="religionChartOption"
+    :education-track-chart-option="educationTrackChartOption"
+    :h-track-grade-chart-option="hTrackGradeChartOption"
+  />
 
-    <div v-if="!selectedSnapshotForOverview" class="hint">
-      Bitte Snapshot waehlen.
-    </div>
-
-    <div v-else class="overview-grid">
-      <article class="overview-card">
-        <h3 class="overview-title-light">Gesamtschuelerzahl: {{ totalStudentsOverview }}</h3>
-        <EChartPanel :option="genderChartOption" />
-      </article>
-
-      <article class="overview-card">
-        <h3 class="overview-title-light">Jahrgaenge</h3>
-        <EChartPanel :option="gradeChartOption" />
-      </article>
-
-      <article class="overview-card">
-        <h3 class="overview-title-light">Foerderbedarf: 
-                  {{ specialNeedsOverview }} von {{ totalStudentsOverview }} SuS =     {{ specialNeedsPercentOverview }}%
-        </h3>
-        <EChartPanel :option="supportChartOption" />
-      </article>
-
-      <article class="overview-card">
-        <h3 class="overview-title-light">Erstfoerderung:
-                  {{ efOverview }} von {{ totalStudentsOverview }} SuS =     {{ efPercentOverview }}%
-        </h3>
-        <EChartPanel :option="efChartOption" />
-      </article>
-
-
-
-      <article class="overview-card ">
-        <h3 class="overview-title-light">Migrationshintergrund: {{ migrationPercentOverview }}%</h3>
-        <EChartPanel :option="migrationChartOption" />
-      </article>
-
-      <article class="overview-card ">
-        <h3 class="overview-title-light">Staatsangehoerigkeiten: {{ nationalityPercentOverview }}% deutsch
-        </h3>
-        <EChartPanel :option="nationalityChartOption" />
-      </article>
-
-      <article class="overview-card overview-card-half">
-        <h3 class="overview-title-light">Konfessionen</h3>
-        <EChartPanel :option="religionChartOption" />
-      </article>
-
-      <article class="overview-card overview-card-half">
-        <h3 class="overview-title-light">Anteil SuS in §132c: {{ hTrackPercentOverview }}%</h3>
-        <EChartPanel :option="educationTrackChartOption" />
-      </article>
-
-      <article class="overview-card overview-card-half">
-        <h3 class="overview-title-light">H (§132c an RS) je Jahrgang</h3>
-        <EChartPanel :option="hTrackGradeChartOption" />
-      </article>
-
-    </div>
-  </section>
-
-  <section v-if="view === 'schuelerzahlen'" class="card">
-    <div class="row">
-      <h2>Schuelerzahlen</h2>
-    </div>
-
-    <div v-if="!selectedSnapshotForOverview" class="hint">
-      Bitte Snapshot waehlen.
-    </div>
-
-    <div v-else-if="loadingOverview" class="hint">
-      Lade Schuelerzahlen...
-    </div>
-
-    <div v-else-if="errorOverview" class="error">
-      {{ errorOverview }}
-    </div>
-
-    <div v-else-if="!schoolTrendSeriesCount" class="hint">
-      Keine Schuelerzahl-Trends fuer die aktuelle Auswahl.
-    </div>
-
-    <div v-else class="overview-grid">
-      <article class="overview-card overview-card-half">
-        <h3 class="overview-title-light">Schuelerzahlen je Schule und Abschnitt</h3>
-        <EChartPanel :option="schoolTrendChartOption" />
-      </article>
-      <article class="overview-card overview-card-half">
-        <h3 class="overview-title-light">Schuelerzahlen gesamt je Abschnitt</h3>
-        <EChartPanel :option="cumulativeSchoolTrendChartOption" />
-      </article>
-
-      <article class="overview-card overview-card-full">
-        <h3 class="overview-title-light">Schuelerzahlen je Schule und Abschnitt (Tabelle)</h3>
-        <div class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr>
-                <th class="col-snr">SNR</th>
-                <th class="name">Schule</th>
-                <th v-for="t in schoolTrendTerms" :key="'schuelerzahlen-term-' + t.termId" class="num">
-                  {{ t.termLabel }}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="s in schoolTrendSchools" :key="'schuelerzahlen-school-' + s.snr">
-                <td class="col-snr">{{ s.snr }}</td>
-                <td class="name" :title="s.name">{{ s.name || '-' }}</td>
-                <td v-for="t in schoolTrendTerms" :key="'schuelerzahlen-cell-' + s.snr + '-' + t.termId" class="num">
-                  {{ getSchoolTrendStudents(s.snr, t.termId) || '-' }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </article>
-
-      <article class="overview-card overview-card-wide2">
-        <h3 class="overview-title-light">Entwicklung DAZ-Schueler (EF = 1)</h3>
-        <EChartPanel :option="efTrendChartOption" />
-      </article>
-    </div>
-  </section>
+  <StudentNumbersDashboard
+    v-if="view === 'schuelerzahlen'"
+    :selected-snapshot="selectedSnapshotForOverview"
+    :loading="loadingOverview"
+    :error="errorOverview"
+    :school-trend-series-count="schoolTrendSeriesCount"
+    :school-trend-chart-option="schoolTrendChartOption"
+    :cumulative-school-trend-chart-option="cumulativeSchoolTrendChartOption"
+    :ef-trend-chart-option="efTrendChartOption"
+    :school-trend-terms="schoolTrendTerms"
+    :school-trend-schools="schoolTrendSchools"
+    :get-school-trend-students="getSchoolTrendStudents"
+  />
 
   <!-- ===== Dashboard: Lehrerdaten ===== -->
-  <section v-if="view === 'lehrerdaten'" class="card">
-    <div class="row">
-      <h2>Lehrerdaten</h2>
-    </div>
-
-    <div v-if="!activeSnapshotSelection" class="hint">
-      Bitte Snapshot waehlen.
-    </div>
-    <div v-else-if="loadingTeachers" class="hint">
-      Lade Lehrerdaten...
-    </div>
-    <div v-else-if="errorTeachers" class="error">
-      {{ errorTeachers }}
-    </div>
-
-    <div v-else class="overview-grid">
-      <article class="overview-card">
-        <h3 class="overview-title-light">Gesamtlehrerzahl: {{ teachersData?.totalTeachers || 0 }}</h3>
-        <EChartPanel :option="teacherSexChartOption" />
-      </article>
-
-      <article class="overview-card">
-        <h3 class="overview-title-light">Altersstruktur</h3>
-        <EChartPanel :option="teacherAgeChartOption" />
-      </article>
-
-      <article class="overview-card">
-        <h3 class="overview-title-light">Nationalität</h3>
-        <EChartPanel :option="teacherNationChartOption" />
-      </article>
-
-      <article class="overview-card overview-card-wide2">
-        <h3 class="overview-title-light">Wohnorte (Top 10)</h3>
-        <EChartPanel :option="teacherCityChartOption" />
-      </article>
-    </div>
-  </section>
+  <TeachersDashboard
+    v-if="view === 'lehrerdaten'"
+    :active-snapshot-selection="activeSnapshotSelection"
+    :loading="loadingTeachers"
+    :error="errorTeachers"
+    :total-teachers="teachersData?.totalTeachers || 0"
+    :teacher-sex-chart-option="teacherSexChartOption"
+    :teacher-age-chart-option="teacherAgeChartOption"
+    :teacher-nation-chart-option="teacherNationChartOption"
+    :teacher-city-chart-option="teacherCityChartOption"
+  />
 
   <!-- ===== Dashboard 3 DAZ ===== -->
-  <section v-if="view === 'daz'" class="card">
-    <div class="row">
-      <h2>DAZ (SuS in Erstfoerderung je Klasse)</h2>
-
-      <div class="row-right">
-        <!-- Falls du Schwellen + Einfaerbung auch im DAZ willst:
-           Dann kannst du hier Unter-/Obergrenze ebenfalls anzeigen.
-           (optional, sag Bescheid, dann fuege ich sie sauber ein) -->
-
-        <label class="inline">
-          Untergrenze einfaerben
-          <input type="number" min="1" :max="dazUpperThreshold - 1" v-model.number="dazLowerThreshold" class="threshold-input threshold-low" />
-        </label>
-
-        <label class="inline">
-          Obergrenze einfaerben
-          <input type="number" :min="dazLowerThreshold + 1" max="45" v-model.number="dazUpperThreshold" class="threshold-input threshold-high" />
-        </label>
-      </div>
-    </div>
-
-    <div v-if="errorDaz" class="error">{{ errorDaz }}</div>
-
-    <div v-if="!dazRows.length" class="hint">
-      Keine DAZ-Daten fuer die aktuelle Auswahl.
-    </div>
-
-    <div v-else class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th class="col-city">Ort</th>
-            <th class="col-snr">SNR</th>
-            <th class="name">Schule</th>
-
-            <th v-for="c in dazClassCodes" :key="c" class="num" :title="c">{{ getDazClassHeaderLabel(c) }}</th>
-            <th class="num total">Summe</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          <tr v-for="s in schoolsInDazMatrix" :key="s.snr">
-            <td class="col-city">{{ s.city || "-" }}</td>
-            <td class="col-snr">{{ s.snr }}</td>
-            <td class="name">{{ s.name || "-" }}</td>
-
-            <td v-for="c in dazClassCodes" :key="s.snr + '-' + c" class="num" :class="dazCellClass(getDaz(s.snr, c))">
-              {{ getDaz(s.snr, c) }}
-            </td>
-
-            <td class="num total"><b>{{ totalDazForSchool(s.snr) }}</b></td>
-          </tr>
-        </tbody>
-
-        <tfoot>
-          <tr>
-            <td colspan="3"><b>Summe</b></td>
-
-            <td v-for="c in dazClassCodes" :key="'sumdaz-' + c" class="num total">
-              <b>{{ totalDazForClass(c) }}</b>
-            </td>
-
-            <td class="num total"><b>{{ grandTotalDaz }}</b></td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  </section>
+  <DazDashboard
+    v-if="view === 'daz'"
+    v-model:daz-lower-threshold="dazLowerThreshold"
+    v-model:daz-upper-threshold="dazUpperThreshold"
+    :daz-class-codes="dazClassCodes"
+    :daz-rows-count="dazRows.length"
+    :error="errorDaz"
+    :grand-total-daz="grandTotalDaz"
+    :schools-in-daz-matrix="schoolsInDazMatrix"
+    :get-daz="getDaz"
+    :get-daz-class-header-label="getDazClassHeaderLabel"
+    :total-daz-for-class="totalDazForClass"
+    :total-daz-for-school="totalDazForSchool"
+    :daz-cell-class="dazCellClass"
+  />
 </template>
 </div>

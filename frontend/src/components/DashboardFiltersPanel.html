@@ -1,0 +1,61 @@
+<section class="card">
+  <div class="controls-card">
+    <div class="controls">
+      <label class="filter-medium">
+        Snapshot
+        <select v-model="snapshotNameSelectionModel" :disabled="!snapshotNameOptions.length">
+          <option value="" disabled>(bitte waehlen)</option>
+          <option
+            v-for="option in snapshotNameOptions"
+            :key="'snapshot-name-' + option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+
+      <label class="filter-term">
+        Schuljahr
+        <select v-model="schoolTermSelectionModel" :disabled="!schoolTermOptions.length">
+          <option value="" disabled>(bitte waehlen)</option>
+          <option
+            v-for="option in schoolTermOptions"
+            :key="'term-' + option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+
+      <label class="filter-medium">
+        Ort
+        <select v-model="selectedCityModel">
+          <option value="">(alle)</option>
+          <option v-for="city in cities" :key="city" :value="city">
+            {{ city }}
+          </option>
+        </select>
+      </label>
+
+      <label class="filter-large">
+        Schule
+        <select v-model="selectedSnrModel">
+          <option value="">(alle)</option>
+          <option v-for="school in schoolsFilteredForDropdown" :key="school.snr" :value="school.snr">
+            {{ school.snr }} - {{ school.name }}
+          </option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div v-if="summaryItems.length" class="summary">
+    <div v-for="item in summaryItems" :key="item.label">
+      <b>{{ item.label }}:</b> {{ item.value }}
+    </div>
+  </div>
+
+  <div v-if="errorMessage" class="error">{{ errorMessage }}</div>
+</section>
