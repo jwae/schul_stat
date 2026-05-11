@@ -454,6 +454,35 @@ function buildSelectionClassLookup(payload) {
   return lookup;
 }
 
+function extractSelectionClasses(payload, targetSectionId = 0) {
+  const classEntries = Array.isArray(payload?.klassen)
+    ? payload.klassen
+    : Array.isArray(payload?.classes)
+      ? payload.classes
+      : [];
+  const normalizedTargetSectionId = Number(targetSectionId || 0);
+
+  return classEntries
+    .filter((entry) => {
+      if (!normalizedTargetSectionId) return true;
+      const sectionId = Number(firstDefinedValue(entry, [
+        "idSchuljahresabschnitt",
+        "idAbschnitt",
+        "id_abschnitt",
+        "abschnitt_id",
+        "section_id",
+        "sectionId",
+        "schuljahresabschnitt_id",
+        "schuljahresabschnittId",
+      ]) || 0);
+      return !sectionId || sectionId === normalizedTargetSectionId;
+    })
+    .map((entry) => ({
+      ...entry,
+      class_code: String(firstDefinedValue(entry, ["kuerzel", "kuerzelAnzeige", "kurzbezeichnung"]) || "").trim(),
+    }));
+}
+
 function extractSelectionStudents(payload, inheritedClassCode = "", inheritedSectionId = 0, targetSectionId = 0) {
   const classLookup = buildSelectionClassLookup(payload);
   const normalizedTargetSectionId = Number(targetSectionId || 0);
@@ -523,6 +552,21 @@ function extractSelectionStudents(payload, inheritedClassCode = "", inheritedSec
   }
 
   return groupedEntries;
+}
+
+function buildSelectionClassMetaLookup(classEntries, yearGroupLookup = null) {
+  const byId = new Map();
+  const byCode = new Map();
+
+  for (const entry of classEntries || []) {
+    const normalizedClass = normalizeClassEntry(entry, yearGroupLookup);
+    if (!normalizedClass?.class_code) continue;
+    const classId = Number(firstDefinedValue(entry, ["id", "idKlasse", "klasse_id", "class_id", "classId"]) || 0);
+    if (classId > 0) byId.set(String(classId), normalizedClass);
+    byCode.set(buildClassCodeLookupKey(normalizedClass.class_code), normalizedClass);
+  }
+
+  return { byId, byCode };
 }
 
 function normalizeStudentMasterData(payload) {
@@ -743,13 +787,38 @@ function normalizeClassEntry(entry, yearGroupLookup = null) {
     : "";
   const gradeValue = firstDefinedValue(entry, ["jahrgang", "grade", "stufe", "grade_level", "year"]);
   const parallelValue = String(firstDefinedValue(entry, ["parallelitaet", "parallel", "zug"]) || "").trim();
-  const derivedGradeText = rawCode.slice(0, 2).trim();
-  const derivedParallel = rawCode.slice(-1).trim().toUpperCase();
+  const explicitGrade = mappedYearGroup || String(gradeValue || "").trim();
+  let derivedGradeText = "";
+  let derivedParallel = "";
+
+  if (explicitGrade) {
+    derivedGradeText = explicitGrade;
+    const normalizedExplicitGrade = explicitGrade.toUpperCase();
+    if (rawCode.startsWith(normalizedExplicitGrade)) {
+      derivedParallel = rawCode.slice(normalizedExplicitGrade.length).trim().slice(0, 1).toUpperCase();
+    } else {
+      const trailingParallelMatch = rawCode.match(/([A-Z0-9])$/);
+      if (trailingParallelMatch) {
+        derivedParallel = String(trailingParallelMatch[1] || "").trim().toUpperCase();
+      }
+    }
+  } else {
+    const numericClassMatch = rawCode.match(/^(\d{1,2})([A-Z0-9])$/);
+    if (numericClassMatch) {
+      derivedGradeText = String(numericClassMatch[1] || "").trim();
+      derivedParallel = String(numericClassMatch[2] || "").trim().toUpperCase();
+    } else {
+      // Sonderklassen wie IKA, VK oder EF nicht kuenstlich zerlegen.
+      derivedGradeText = rawCode;
+    }
+  }
 
   return {
     class_code: rawCode,
-    grade: mappedYearGroup || String(gradeValue || "").trim() || derivedGradeText || "",
-    parallel: (parallelValue || derivedParallel || "?").slice(0, 1).toUpperCase(),
+    grade: explicitGrade || derivedGradeText || "",
+    parallel: classHasNoParallel(explicitGrade || derivedGradeText || "", rawCode)
+      ? ""
+      : (parallelValue || derivedParallel || "").slice(0, 1).toUpperCase(),
     bemerkung: rawCode,
   };
 }
@@ -878,6 +947,16 @@ async function loadEducationTrackReferenceRows(conn) {
   }));
 }
 
+async function loadSchoolFormReferenceRows(conn) {
+  const [rows] = await conn.query("SELECT school_form_id, sf, sf_kurz, name FROM school_form");
+  return (rows || []).map((row) => ({
+    school_form_id: Number(row.school_form_id || 0),
+    sf: String(row.sf || "").trim(),
+    sf_kurz: String(row.sf_kurz || "").trim(),
+    name: String(row.name || "").trim(),
+  }));
+}
+
 function normalizeReferenceCode(value) {
   return String(value || "").trim();
 }
@@ -895,6 +974,33 @@ function buildReferenceLookup(rows, idKey, codeKey, labelKey) {
     if (code) byCode.set(code, normalized);
   }
   return { byId, byCode };
+}
+
+function buildSchoolFormLookup(rows) {
+  const byId = new Map();
+  const byCode = new Map();
+  for (const row of rows || []) {
+    const internalId = Number(row?.school_form_id || 0);
+    if (!internalId) continue;
+    const normalized = {
+      internal_id: internalId,
+      sf: String(row?.sf || "").trim(),
+      sf_kurz: String(row?.sf_kurz || "").trim(),
+      label: String(row?.name || "").trim(),
+    };
+    byId.set(String(internalId), normalized);
+    if (normalized.sf) byCode.set(normalized.sf, normalized);
+    if (normalized.sf_kurz) byCode.set(normalized.sf_kurz, normalized);
+  }
+  return { byId, byCode };
+}
+
+function resolveStudentSchoolFormId(schoolFormLookup, schoolDefaultFormId, schoolStructure) {
+  const normalizedStructure = String(schoolStructure || "").trim();
+  if (!normalizedStructure || normalizedStructure === "***" || normalizedStructure === "GY8" || normalizedStructure === "GY9") {
+    return schoolDefaultFormId;
+  }
+  return schoolFormLookup.byCode.get(normalizedStructure)?.internal_id || null;
 }
 
 function buildExternalReferenceMap(externalEntries, internalLookup) {
@@ -1323,14 +1429,73 @@ function buildClassCodeLookupKey(value) {
   return `CODE::${String(value || "").trim().toUpperCase()}`;
 }
 
+function buildClassIdentityKey(grade, parallel, classCode) {
+  return [
+    String(grade || "").trim(),
+    String(parallel || "").trim().toUpperCase(),
+    String(classCode || "").trim().toUpperCase(),
+  ].join("__");
+}
+
+function classHasNoParallel(grade, classCode) {
+  const normalizedGrade = String(grade || "").trim().toUpperCase();
+  const normalizedCode = String(classCode || "").trim().toUpperCase();
+  return ["EF", "Q1", "Q2"].includes(normalizedGrade) || ["EF", "Q1", "Q2"].includes(normalizedCode);
+}
+
+function resolveClassMapId(classMap, normalizedClass) {
+  if (!(classMap instanceof Map) || !normalizedClass?.class_code) return 0;
+  const classCodeKey = buildClassCodeLookupKey(normalizedClass.class_code);
+  const classKey = buildClassIdentityKey(
+    normalizedClass.grade,
+    normalizedClass.parallel,
+    normalizedClass.class_code,
+  );
+  return Number(classMap.get(classKey) || classMap.get(classCodeKey) || 0);
+}
+
+async function findExistingClassId(conn, grade, parallel, classCode) {
+  const normalizedGrade = String(grade || "00").trim() || "00";
+  const normalizedParallel = String(parallel || "").trim().toUpperCase();
+  const normalizedClassCode = String(classCode || "").trim();
+
+  const [exactRows] = await conn.query(
+    `
+    SELECT class_id
+    FROM class
+    WHERE jahrgang = ? AND parallel = ? AND TRIM(class_code) = ?
+    ORDER BY class_id DESC
+    LIMIT 1
+    `,
+    [normalizedGrade, normalizedParallel, normalizedClassCode],
+  );
+  const exactClassId = Number(exactRows?.[0]?.class_id || 0);
+  if (exactClassId) return exactClassId;
+
+  const [legacyRows] = await conn.query(
+    `
+    SELECT class_id
+    FROM class
+    WHERE jahrgang = ? AND parallel = ?
+    ORDER BY class_id DESC
+    LIMIT 1
+    `,
+    [normalizedGrade, normalizedParallel],
+  );
+  return Number(legacyRows?.[0]?.class_id || 0);
+}
+
 async function loadClassMapByCode(conn, classes, yearGroupLookup = null) {
   const uniqueClasses = [];
   const seen = new Set();
   for (const entry of classes || []) {
     const normalized = normalizeClassEntry(entry, yearGroupLookup);
     if (!normalized) continue;
-    if (seen.has(normalized.class_code)) continue;
-    seen.add(normalized.class_code);
+    const classKey = buildClassIdentityKey(normalized.grade, normalized.parallel, normalized.class_code);
+    const codeKey = buildClassCodeLookupKey(normalized.class_code);
+    const dedupeKey = classKey !== "____" ? classKey : codeKey;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
     uniqueClasses.push(normalized);
   }
 
@@ -1344,23 +1509,56 @@ async function loadClassMapByCode(conn, classes, yearGroupLookup = null) {
   );
   const map = new Map();
   for (const row of rows || []) {
-    const key = `${String(row.jahrgang || "").trim()}__${String(row.parallel || "").trim().toUpperCase()}`;
+    const key = buildClassIdentityKey(row.jahrgang, row.parallel, row.class_code);
     const classId = Number(row.class_id || 0);
-    if (key !== "__" && classId) map.set(key, classId);
+    if (key !== "____" && classId) map.set(key, classId);
     const classCodeKey = buildClassCodeLookupKey(row.class_code);
     if (classCodeKey !== "CODE::" && classId) map.set(classCodeKey, classId);
   }
 
   for (const classEntry of uniqueClasses) {
-    const key = `${String(classEntry.grade || "").trim()}__${String(classEntry.parallel || "").trim().toUpperCase()}`;
+    const key = buildClassIdentityKey(classEntry.grade, classEntry.parallel, classEntry.class_code);
+    const classCodeKey = buildClassCodeLookupKey(classEntry.class_code);
     if (map.has(key)) continue;
-    await conn.query(
-      `
-      INSERT INTO class (jahrgang, parallel, class_code, bemerkung)
-      VALUES (?, ?, ?, ?)
-      `,
-      [classEntry.grade || "00", classEntry.parallel || "?", classEntry.class_code, classEntry.bemerkung || classEntry.class_code],
+
+    const existingClassId = await findExistingClassId(
+      conn,
+      classEntry.grade || "00",
+      classEntry.parallel || "",
+      String(classEntry.class_code || "").trim(),
     );
+    if (existingClassId) {
+      map.set(key, existingClassId);
+      map.set(classCodeKey, existingClassId);
+      continue;
+    }
+
+    let insertedClassId = 0;
+    try {
+      const [insertResult] = await conn.query(
+        `
+        INSERT INTO class (jahrgang, parallel, class_code, bemerkung)
+        VALUES (?, ?, ?, ?)
+        `,
+        [classEntry.grade || "00", classEntry.parallel || "", classEntry.class_code, classEntry.bemerkung || classEntry.class_code],
+      );
+      insertedClassId = Number(insertResult?.insertId || 0);
+    } catch (error) {
+      if (Number(error?.errno || 0) === 1062 || String(error?.code || "").toUpperCase() === "ER_DUP_ENTRY") {
+        insertedClassId = await findExistingClassId(
+          conn,
+          classEntry.grade || "00",
+          classEntry.parallel || "",
+          String(classEntry.class_code || "").trim(),
+        );
+      } else {
+        throw error;
+      }
+    }
+    if (insertedClassId) {
+      map.set(key, insertedClassId);
+      map.set(classCodeKey, insertedClassId);
+    }
   }
 
   const [reloadedRows] = await conn.query(
@@ -1370,9 +1568,9 @@ async function loadClassMapByCode(conn, classes, yearGroupLookup = null) {
     `,
   );
   for (const row of reloadedRows || []) {
-    const key = `${String(row.jahrgang || "").trim()}__${String(row.parallel || "").trim().toUpperCase()}`;
+    const key = buildClassIdentityKey(row.jahrgang, row.parallel, row.class_code);
     const classId = Number(row.class_id || 0);
-    if (key !== "__" && classId) map.set(key, classId);
+    if (key !== "____" && classId) map.set(key, classId);
     const classCodeKey = buildClassCodeLookupKey(row.class_code);
     if (classCodeKey !== "CODE::" && classId) map.set(classCodeKey, classId);
   }
@@ -1387,58 +1585,62 @@ async function ensureClassMapEntries(conn, classMap, classes, yearGroupLookup = 
     const normalizedClass = normalizeClassEntry(entry, yearGroupLookup);
     if (!normalizedClass?.class_code) continue;
 
-    const classKey = `${String(normalizedClass.grade || "").trim()}__${String(normalizedClass.parallel || "").trim().toUpperCase()}`;
+    const classKey = buildClassIdentityKey(
+      normalizedClass.grade,
+      normalizedClass.parallel,
+      normalizedClass.class_code,
+    );
     if (seen.has(classKey)) continue;
     seen.add(classKey);
 
-    let classId = Number(classMap.get(classKey) || 0);
-    if (!classId) {
-      classId = Number(classMap.get(buildClassCodeLookupKey(normalizedClass.class_code)) || 0);
-    }
+    let classId = resolveClassMapId(classMap, normalizedClass);
     if (classId) continue;
 
-    const [byCodeRows] = await conn.query(
-      `
-      SELECT class_id, jahrgang, parallel
-      FROM class
-      WHERE TRIM(class_code) = ?
-      ORDER BY class_id DESC
-      LIMIT 1
-      `,
-      [String(normalizedClass.class_code || "").trim()],
+    classId = await findExistingClassId(
+      conn,
+      normalizedClass.grade || "00",
+      normalizedClass.parallel || "",
+      String(normalizedClass.class_code || "").trim(),
     );
-    classId = Number(byCodeRows?.[0]?.class_id || 0);
     if (classId) {
       classMap.set(classKey, classId);
       classMap.set(buildClassCodeLookupKey(normalizedClass.class_code), classId);
       continue;
     }
 
-    const [insertResult] = await conn.query(
-      `
-      INSERT INTO class (jahrgang, parallel, class_code, bemerkung)
-      VALUES (?, ?, ?, ?)
-      `,
-      [
-        normalizedClass.grade || "00",
-        normalizedClass.parallel || "?",
-        normalizedClass.class_code,
-        normalizedClass.bemerkung || normalizedClass.class_code,
-      ],
-    );
-    classId = Number(insertResult?.insertId || 0);
-    if (!classId) {
-      const [createdRows] = await conn.query(
+    try {
+      const [insertResult] = await conn.query(
         `
-        SELECT class_id
-        FROM class
-        WHERE TRIM(class_code) = ?
-        ORDER BY class_id DESC
-        LIMIT 1
+        INSERT INTO class (jahrgang, parallel, class_code, bemerkung)
+        VALUES (?, ?, ?, ?)
         `,
-        [String(normalizedClass.class_code || "").trim()],
+        [
+          normalizedClass.grade || "00",
+          normalizedClass.parallel || "",
+          normalizedClass.class_code,
+          normalizedClass.bemerkung || normalizedClass.class_code,
+        ],
       );
-      classId = Number(createdRows?.[0]?.class_id || 0);
+      classId = Number(insertResult?.insertId || 0);
+    } catch (error) {
+      if (Number(error?.errno || 0) === 1062 || String(error?.code || "").toUpperCase() === "ER_DUP_ENTRY") {
+        classId = await findExistingClassId(
+          conn,
+          normalizedClass.grade || "00",
+          normalizedClass.parallel || "",
+          String(normalizedClass.class_code || "").trim(),
+        );
+      } else {
+        throw error;
+      }
+    }
+    if (!classId) {
+      classId = await findExistingClassId(
+        conn,
+        normalizedClass.grade || "00",
+        normalizedClass.parallel || "",
+        String(normalizedClass.class_code || "").trim(),
+      );
     }
     if (!classId) {
       const error = new Error(`Klasse ${normalizedClass.class_code} (${normalizedClass.grade}${normalizedClass.parallel}) konnte nicht angelegt werden.`);
@@ -4237,6 +4439,7 @@ function createAuthModule(poolProvider) {
       const supportFocusLookup = buildReferenceLookup(await loadSupportFocusReferenceRows(conn), "support_focus_id", "asd", "name");
       const nationLookup = buildReferenceLookup(await loadNationReferenceRows(conn), "nation_id", "code", "label");
       const educationTrackLookup = buildReferenceLookup(await loadEducationTrackReferenceRows(conn), "education_track_id", "sf", "name");
+      const schoolFormLookup = buildSchoolFormLookup(await loadSchoolFormReferenceRows(conn));
       const insertedRows = [];
       const preflightResults = [];
 
@@ -4305,8 +4508,7 @@ function createAuthModule(poolProvider) {
             }
 
             const studentClassEntry = normalizeClassEntry({ kuerzel: student.class_code }, yearGroupLookup);
-            const classKey = `${String(studentClassEntry?.grade || "").trim()}__${String(studentClassEntry?.parallel || "").trim().toUpperCase()}`;
-            const classId = Number(classMap.get(classKey) || 0);
+            const classId = resolveClassMapId(classMap, studentClassEntry);
             if (!classId) {
               const error = new Error(`Klasse ${student.class_code} ist nicht in der Tabelle class vorhanden.`);
               error.statusCode = 400;
@@ -4889,6 +5091,7 @@ function createAuthModule(poolProvider) {
       const supportFocusLookup = buildReferenceLookup(await loadSupportFocusReferenceRows(conn), "support_focus_id", "asd", "name");
       const nationLookup = buildReferenceLookup(await loadNationReferenceRows(conn), "nation_id", "code", "label");
       const educationTrackLookup = buildReferenceLookup(await loadEducationTrackReferenceRows(conn), "education_track_id", "sf", "name");
+      const schoolFormLookup = buildSchoolFormLookup(await loadSchoolFormReferenceRows(conn));
       const selectedTermLabel = toSchoolYearLabel(term.school_year, term.term_no);
       const currentSchoolYearLabel = getCurrentSchoolYearLabel();
       const allowedStatuses = selectedTermLabel === currentSchoolYearLabel
@@ -5021,6 +5224,8 @@ function createAuthModule(poolProvider) {
               sourceFetchDurationMs += durationMs;
             },
           );
+          const selectionClasses = extractSelectionClasses(selectionPayload, externalSectionId);
+          const selectionClassMeta = buildSelectionClassMetaLookup(selectionClasses, yearGroupLookup);
           const selectionStudents = extractSelectionStudents(selectionPayload)
             .filter((student) => {
               const studentSectionId = Number(student?.section_id || 0);
@@ -5037,10 +5242,7 @@ function createAuthModule(poolProvider) {
             });
           const classMap = await loadClassMapByCode(
             conn,
-            selectionStudents.map((student) => ({
-              kuerzel: String(student?.class_code || "").trim(),
-              jahrgang: String(student?.jahrgang || "").trim(),
-            })),
+            selectionClasses,
             yearGroupLookup,
           );
           const eligibleStudents = selectionStudents
@@ -5053,10 +5255,7 @@ function createAuthModule(poolProvider) {
           await ensureClassMapEntries(
             conn,
             classMap,
-            eligibleStudents.map((entry) => ({
-              kuerzel: entry?.student?.class_code,
-              jahrgang: entry?.student?.jahrgang,
-            })),
+            selectionClasses,
             yearGroupLookup,
           );
           const studentDetailConcurrency = 8;
@@ -5064,21 +5263,18 @@ function createAuthModule(poolProvider) {
           const preparedStudents = await measureFetchWindow(
             () => mapWithConcurrency(eligibleStudents, async (entry) => {
               const { student, studentId, resolvedStatus } = entry;
-              const normalizedClass = normalizeClassEntry({
-                kuerzel: student?.class_code,
-                jahrgang: student?.jahrgang,
-              }, yearGroupLookup);
+              const normalizedClass = selectionClassMeta.byId.get(String(student?.class_id || ""))
+                || selectionClassMeta.byCode.get(buildClassCodeLookupKey(student?.class_code))
+                || normalizeClassEntry({
+                  kuerzel: student?.class_code,
+                  jahrgang: student?.jahrgang,
+                }, yearGroupLookup);
               if (!normalizedClass?.class_code) {
                 const error = new Error(`Klasse fuer Schueler ${studentId} konnte nicht ermittelt werden.`);
                 error.statusCode = 400;
                 throw error;
               }
-              const classKey = `${String(normalizedClass.grade || "").trim()}__${String(normalizedClass.parallel || "").trim().toUpperCase()}`;
-              const classId = Number(
-                classMap.get(classKey)
-                || classMap.get(buildClassCodeLookupKey(normalizedClass.class_code))
-                || 0,
-              );
+              const classId = resolveClassMapId(classMap, normalizedClass);
               if (!classId) {
                 const error = new Error(`Klasse ${normalizedClass.class_code} (${normalizedClass.grade}${normalizedClass.parallel}) konnte nicht angelegt werden.`);
                 error.statusCode = 400;
@@ -5115,11 +5311,12 @@ function createAuthModule(poolProvider) {
               const religionId = resolveMappedReference(religionMap, masterData.religionID)?.internal_id || null;
               const supportFocus1Id = resolveMappedReference(supportFocusMap, learningSection.foerderschwerpunkt1ID)?.internal_id || null;
               const supportFocus2Id = resolveMappedReference(supportFocusMap, learningSection.foerderschwerpunkt2ID)?.internal_id || null;
-              const schoolFormId = Number(row.school_form_id || 0) || null;
+              const schoolDefaultFormId = Number(row.school_form_id || 0) || null;
               const nationId = nationLookup.byCode.get(String(masterData.staatsangehoerigkeitID ?? "").trim())?.internal_id || null;
               const schoolStructure = String(learningSection.schulgliederung ?? "").trim();
+              const schoolFormId = resolveStudentSchoolFormId(schoolFormLookup, schoolDefaultFormId, schoolStructure);
               const educationTrackId = schoolStructure === "***"
-                ? schoolFormId
+                ? schoolDefaultFormId
                 : (educationTrackLookup.byCode.get(schoolStructure)?.internal_id || null);
               const migration = normalizeFlag(masterData.migration);
               const ef = resolveEfFlag(learningSection.klassenart);
@@ -5410,7 +5607,8 @@ function createAuthModule(poolProvider) {
           sd.db_password_enc,
           sd.is_active,
           s.snr,
-          s.name AS school_name
+          s.name AS school_name,
+          s.school_form_id
         FROM school_source_db sd
         JOIN school s ON s.snr = sd.snr
         WHERE sd.source_id IN (${placeholders})
@@ -5428,6 +5626,8 @@ function createAuthModule(poolProvider) {
       const religionLookup = buildReferenceLookup(await loadReligionReferenceRows(conn), "religion_id", "asd", "name");
       const supportFocusLookup = buildReferenceLookup(await loadSupportFocusReferenceRows(conn), "support_focus_id", "asd", "name");
       const nationLookup = buildReferenceLookup(await loadNationReferenceRows(conn), "nation_id", "code", "label");
+      const educationTrackLookup = buildReferenceLookup(await loadEducationTrackReferenceRows(conn), "education_track_id", "sf", "name");
+      const schoolFormLookup = buildSchoolFormLookup(await loadSchoolFormReferenceRows(conn));
       const sources = [];
       updatePreviewSchoolYearProgress({
         active: true,
@@ -5540,10 +5740,11 @@ function createAuthModule(poolProvider) {
             const mappedFocus1 = resolveMappedReference(supportFocusMap, learningSection.foerderschwerpunkt1ID);
             const mappedFocus2 = resolveMappedReference(supportFocusMap, learningSection.foerderschwerpunkt2ID);
             const sexId = resolveSexId(masterData.geschlecht);
-            const schoolFormId = Number(row.school_form_id || 0) || null;
+            const schoolDefaultFormId = Number(row.school_form_id || 0) || null;
             const schoolStructure = String(learningSection.schulgliederung ?? "").trim();
+            const schoolFormId = resolveStudentSchoolFormId(schoolFormLookup, schoolDefaultFormId, schoolStructure);
             const educationTrackId = schoolStructure === "***"
-              ? schoolFormId
+              ? schoolDefaultFormId
               : (educationTrackLookup.byCode.get(schoolStructure)?.internal_id || null);
             const hasSpecialNeeds = Boolean(
               String(learningSection.foerderschwerpunkt1ID ?? "").trim() ||

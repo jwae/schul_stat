@@ -470,7 +470,7 @@ app.get(
 
 /**
  * GET /api/kpi/class-strengths/by-school?snapshotDate=YYYY-MM-DD&schoolYear=2024&termNo=1&city=...&snr=...
- * -> rows: [{city,snr,name,class_code,grade,parallel,students}]
+ * -> rows: [{city,snr,name,class_code,bemerkung,grade,parallel,students}]
  *
  * WICHTIG: class_code muss bei dir existieren. Falls deine Spalte anders heißt:
  * - ersetze c.class_code unten entsprechend (z.B. c.name)
@@ -527,6 +527,7 @@ app.get(
         c.jahrgang AS grade,
         c.parallel,
         c.class_code,
+        c.bemerkung,
         COUNT(ss.student_no) AS students
       FROM snapshot_student ss
       JOIN snapshot sp ON sp.snapshot_id = ss.snapshot_id
@@ -534,7 +535,7 @@ app.get(
       JOIN school sc ON sc.snr = sp.snr
       JOIN \`class\` c ON c.class_id = ss.class_id
       WHERE ${where.join(" AND ")}
-      GROUP BY sc.city, sc.snr, sc.name, c.jahrgang, c.parallel, c.class_code
+      GROUP BY sc.city, sc.snr, sc.name, c.jahrgang, c.parallel, c.class_code, c.bemerkung
       ORDER BY sc.city, sc.snr, c.jahrgang, c.parallel;
     `;
 
@@ -597,6 +598,7 @@ app.get(
         c.jahrgang AS grade,
         c.parallel,
         c.class_code,
+        c.bemerkung,
         SUM(CASE WHEN ss.ef = 1 THEN 1 ELSE 0 END) AS daz
       FROM snapshot_student ss
       JOIN snapshot sp ON sp.snapshot_id = ss.snapshot_id
@@ -604,7 +606,7 @@ app.get(
       JOIN school sc ON sc.snr = sp.snr
       JOIN \`class\` c ON c.class_id = ss.class_id
       WHERE ${where.join(" AND ")}
-      GROUP BY sc.city, sc.snr, sc.name, c.jahrgang, c.parallel, c.class_code
+      GROUP BY sc.city, sc.snr, sc.name, c.jahrgang, c.parallel, c.class_code, c.bemerkung
       ORDER BY sc.city, sc.snr, c.jahrgang, c.parallel;
     `;
 

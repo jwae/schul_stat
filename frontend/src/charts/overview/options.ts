@@ -163,16 +163,25 @@ export function buildMigrationChartOption(data: OverviewData) {
 }
 
 /**
- * Builds ECharts option for Education Track (Bildungsgaenge) breakdown.
+ * Builds ECharts option for H (§132c an RS) share of all students.
  */
 export function buildEducationTrackChartOption(data: OverviewData) {
-  const chartData = data.educationTrackBreakdown || [];
+  const hTrackTotal = (data.hTrackGradeBreakdown || []).reduce(
+    (sum, item) => sum + Number(item?.value || 0),
+    0,
+  );
+  const totalStudents = Number(data?.totals?.totalStudents || 0);
+  const remainingStudents = Math.max(0, totalStudents - hTrackTotal);
+  const chartData = [
+    { name: "H (§132c an RS)", value: hTrackTotal },
+    { name: "Uebrige SuS", value: remainingStudents },
+  ].filter((item) => item.value > 0);
   return {
     tooltip: { trigger: "item" },
     legend: commonLegend,
     series: [
       {
-        name: "Bildungsgang",
+        name: "§132c-Anteil",
         type: "pie",
         radius: ["40%", "70%"],
         center: ["50%", "45%"],

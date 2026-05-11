@@ -50,6 +50,17 @@ export function useDaz() {
     return [...set].sort((a, b) => String(a).localeCompare(String(b)));
   });
 
+  const dazClassHeaderLabels = computed(() => {
+    const labels = new Map<string, string>();
+    for (const row of dazRows.value) {
+      const classCode = String(row.class_code || "").trim();
+      if (!classCode || labels.has(classCode)) continue;
+      const remark = String(row.bemerkung || "").trim();
+      labels.set(classCode, remark || classCode);
+    }
+    return labels;
+  });
+
   const schoolsInDazMatrix = computed(() => {
     const map = new Map<string, { city: string; snr: string; name: string }>();
     for (const r of dazRows.value) {
@@ -85,6 +96,10 @@ export function useDaz() {
     return sum;
   }
 
+  function getDazClassHeaderLabel(classCode: string): string {
+    return dazClassHeaderLabels.value.get(String(classCode || "").trim()) || String(classCode || "").trim();
+  }
+
   const grandTotalDaz = computed(() => {
     return dazRows.value.reduce((sum, r) => sum + Number(r.daz), 0);
   });
@@ -108,6 +123,7 @@ export function useDaz() {
     dazClassCodes,
     schoolsInDazMatrix,
     getDaz,
+    getDazClassHeaderLabel,
     totalDazForSchool,
     totalDazForClass,
     grandTotalDaz,

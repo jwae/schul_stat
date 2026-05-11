@@ -292,7 +292,7 @@
             <th class="col-snr">SNR</th>
             <th class="name">Schule</th>
 
-            <th v-for="c in classCodes" :key="c" class="num">{{ c }}</th>
+            <th v-for="c in classCodes" :key="c" class="num" :title="c">{{ getClassHeaderLabel(c) }}</th>
 
             <th class="num total">Summe</th>
           </tr>
@@ -533,11 +533,7 @@
             <th class="col-snr">SNR</th>
             <th class="name">Schule</th>
 
-            <th v-for="c in dazClassCodes"
-    :key="c"
-    class="num">
-  {{ c }}
-</th>
+            <th v-for="c in dazClassCodes" :key="c" class="num" :title="c">{{ getDazClassHeaderLabel(c) }}</th>
             <th class="num total">Summe</th>
           </tr>
         </thead>

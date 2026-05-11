@@ -90,6 +90,7 @@ export interface ClassStrengthRow {
   snr: string;
   name: string;
   class_code: string;
+  bemerkung?: string;
   students: number;
 }
 
@@ -98,6 +99,7 @@ export interface DazRow {
   snr: string;
   name: string;
   class_code: string;
+  bemerkung?: string;
   daz: number;
 }
 

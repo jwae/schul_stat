@@ -50,6 +50,17 @@ export function useClassStrengths() {
     return [...set].sort((a, b) => String(a).localeCompare(String(b)));
   });
 
+  const classHeaderLabels = computed(() => {
+    const labels = new Map<string, string>();
+    for (const row of classRows.value) {
+      const classCode = String(row.class_code || "").trim();
+      if (!classCode || labels.has(classCode)) continue;
+      const remark = String(row.bemerkung || "").trim();
+      labels.set(classCode, remark || classCode);
+    }
+    return labels;
+  });
+
   const schoolsInClassMatrix = computed(() => {
     const map = new Map<string, { city: string; snr: string; name: string }>();
     for (const r of classRows.value) {
@@ -86,6 +97,10 @@ export function useClassStrengths() {
     return sum;
   }
 
+  function getClassHeaderLabel(classCode: string): string {
+    return classHeaderLabels.value.get(String(classCode || "").trim()) || String(classCode || "").trim();
+  }
+
   const grandTotalClasses = computed(() => {
     return classRows.value.reduce((sum, r) => sum + Number(r.students), 0);
   });
@@ -109,6 +124,7 @@ export function useClassStrengths() {
     classCodes,
     schoolsInClassMatrix,
     getClassStudents,
+    getClassHeaderLabel,
     totalForSchool,
     totalForClass,
     grandTotalClasses,

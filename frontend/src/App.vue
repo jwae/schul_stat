@@ -49,14 +49,14 @@ const {
 const {
   loadingClasses, errorClasses, selectedSnapshotForClasses, classRows,
   lowerThreshold, upperThreshold, loadClassStrengths, classCodes,
-  schoolsInClassMatrix, getClassStudents, totalForSchool, totalForClass,
+  schoolsInClassMatrix, getClassStudents, getClassHeaderLabel, totalForSchool, totalForClass,
   grandTotalClasses, classCellClass
 } = useClassStrengths();
 
 const {
   loadingDaz, errorDaz, selectedSnapshotForDaz, dazRows,
   dazLowerThreshold, dazUpperThreshold, loadDaz, dazClassCodes,
-  schoolsInDazMatrix, getDaz, totalDazForSchool, totalDazForClass,
+  schoolsInDazMatrix, getDaz, getDazClassHeaderLabel, totalDazForSchool, totalDazForClass,
   grandTotalDaz, dazCellClass
 } = useDaz();
 
