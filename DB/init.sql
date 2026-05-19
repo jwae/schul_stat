@@ -672,6 +672,24 @@ INSERT INTO `religion` VALUES
 (21,'HR','jüdisch',21),
 (22,'ME','mennonitisch',22);
 
+INSERT INTO `school_form` VALUES
+(1,'02','Grundschule','G','GS'),
+(2,'04','Hauptschule','H','HS'),
+(3,'06','Volksschule','V','VS'),
+(4,'08','Förderschule','S','FÖ'),
+(5,'10','Realschule','R','RS'),
+(6,'13','Primusschule','PS','PS'),
+(7,'14','Sekundarschule','SK','SK'),
+(8,'15','Gesamtschule','GE','GE'),
+(9,'16','Gemeinschaftsschule','GM','GM'),
+(10,'17','Freie Waldorfschule','FW','FW'),
+(11,'18','Hiberniaschule','FW','FW'),
+(12,'19','Freie Waldorfförderschule','FW','FW'),
+(13,'20','Gymnasium','GY','GY'),
+(14,'25','Weiterbildungskolleg','WB','WB'),
+(15,'30','Berufskolleg','BK','BK'),
+(16,'83','Schule für Kranke','S','S');
+
 INSERT INTO `school` VALUES
 ('100011','Städt. Gesamtschule','Haan',8,0),
 ('100012','Städt. Gemeinschaftsgrundschule','Leverkusen',1,0),
@@ -853,24 +871,6 @@ INSERT INTO `school` VALUES
 ('199552','Förderzentrum Mönchengladbach-Süd,FÖ.d.','Mönchengladbach',4,0),
 ('199941','Gesamtschule am Botanischen Garten','Krefeld',8,0);
 
-INSERT INTO `school_form` VALUES
-(1,'02','Grundschule','G','GS'),
-(2,'04','Hauptschule','H','HS'),
-(3,'06','Volksschule','V','VS'),
-(4,'08','Förderschule','S','FÖ'),
-(5,'10','Realschule','R','RS'),
-(6,'13','Primusschule','PS','PS'),
-(7,'14','Sekundarschule','SK','SK'),
-(8,'15','Gesamtschule','GE','GE'),
-(9,'16','Gemeinschaftsschule','GM','GM'),
-(10,'17','Freie Waldorfschule','FW','FW'),
-(11,'18','Hiberniaschule','FW','FW'),
-(12,'19','Freie Waldorfförderschule','FW','FW'),
-(13,'20','Gymnasium','GY','GY'),
-(14,'25','Weiterbildungskolleg','WB','WB'),
-(15,'30','Berufskolleg','BK','BK'),
-(16,'83','Schule für Kranke','S','S');
-
 INSERT INTO `sex` VALUES
 (3,'3','männlich'),
 (4,'4','weiblich'),
@@ -889,28 +889,28 @@ INSERT INTO `support_focus` VALUES
 (9,'GB','Geistige Entwicklung'),
 (11,'SG','Hören und Kommunikation (schwerhörige)');
 
-INSERT INTO `term` VALUES
-(43,2019,1,'2019.01'),
-(44,2019,2,'2019.02'),
-(41,2020,1,'2020.01'),
-(42,2020,2,'2020.02'),
-(39,2021,1,'2021.01'),
-(40,2021,2,'2021.02'),
-(37,2022,1,'2022.01'),
-(38,2022,2,'2022.02'),
-(35,2023,1,'2023.01'),
-(36,2023,2,'2023.02'),
-(1,2024,1,'2024.01'),
-(2,2024,2,'2024.02'),
-(3,2025,1,'2025.01'),
-(4,2025,2,'2025.02'),
-(5,2026,1,'2026.01'),
-(6,2026,2,'2026.02'),
-(7,2027,1,'2027.01'),
-(8,2027,2,'2027.02'),
-(9,2028,1,'2028.01'),
-(10,2028,2,'2028.02'),
-(11,2029,1,'2029.01'),
-(12,2029,2,'2029.02'),
-(33,2030,1,'2030.01'),
-(34,2030,2,'2030.02');
+INSERT INTO `term` (`term_id`, `school_year`, `term_no`) VALUES
+(43,2019,1),
+(44,2019,2),
+(41,2020,1),
+(42,2020,2),
+(39,2021,1),
+(40,2021,2),
+(37,2022,1),
+(38,2022,2),
+(35,2023,1),
+(36,2023,2),
+(1,2024,1),
+(2,2024,2),
+(3,2025,1),
+(4,2025,2),
+(5,2026,1),
+(6,2026,2),
+(7,2027,1),
+(8,2027,2),
+(9,2028,1),
+(10,2028,2),
+(11,2029,1),
+(12,2029,2),
+(33,2030,1),
+(34,2030,2);
