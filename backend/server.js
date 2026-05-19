@@ -218,6 +218,29 @@ function ensureDatabaseConfigured(req, res, next) {
   next();
 }
 
+function isEnabledEnvFlag(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+async function autoConfigurePoolFromEnv() {
+  if (!isEnabledEnvFlag(process.env.DB_AUTO_CONNECT)) {
+    return;
+  }
+
+  const host = String(process.env.DB_HOST || "").trim();
+  const database = String(process.env.DB_NAME || "").trim();
+  const user = String(process.env.DB_USER || "").trim();
+  const password = String(process.env.DB_PASSWORD || "");
+  const port = Number(process.env.DB_PORT || 3306);
+
+  if (!host || !database || !user) {
+    throw new Error("DB_AUTO_CONNECT ist aktiv, aber DB_HOST, DB_NAME oder DB_USER fehlen.");
+  }
+
+  await configurePool({ host, port, database, user, password });
+}
+
 const {
   router: authRouter,
   authenticateToken,
@@ -1452,10 +1475,30 @@ app.get("/api/kpi/overview", requireDashboardPermission("uebersicht"), async (re
   }
 });
 
-app.listen(3000, () => {
-  console.log("API laeuft auf http://localhost:3000");
-  console.log(
-    `DB Standardwerte: host=${process.env.DB_HOST || "127.0.0.1"} port=${Number(process.env.DB_PORT || 3306)} db=${process.env.DB_NAME || "stats"}`
-  );
-  console.log("Warte auf DB-Verbindung ueber /api/connection/connect");
-});
+const port = Number(process.env.PORT || 3000);
+
+async function startServer() {
+  try {
+    await autoConfigurePoolFromEnv();
+    if (currentDbConfig) {
+      console.log(
+        `DB automatisch verbunden: host=${currentDbConfig.host} port=${currentDbConfig.port} db=${currentDbConfig.database}`
+      );
+    }
+  } catch (error) {
+    console.error("Automatische DB-Verbindung beim Start fehlgeschlagen:", error?.message || error);
+    process.exit(1);
+  }
+
+  app.listen(port, () => {
+    console.log(`API laeuft auf Port ${port}`);
+    console.log(
+      `DB Standardwerte: host=${process.env.DB_HOST || "127.0.0.1"} port=${Number(process.env.DB_PORT || 3306)} db=${process.env.DB_NAME || "stats"}`
+    );
+    if (!currentPool) {
+      console.log("Warte auf DB-Verbindung ueber /api/connection/connect");
+    }
+  });
+}
+
+startServer();

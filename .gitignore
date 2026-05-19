@@ -2,12 +2,23 @@ node_modules/
 dist/
 dist-ssr/
 coverage/
+.env
+.env.*
+!.env.example
+!.env.docker
+01_1_copy_project_for_test_pc.bat
+db_data/
 logs/
+docs/
 import/
+my-new-skill-db/
 Importdateien/
 Transfer/
+Transfer-01/
+Transfer - 01/
 Testdaten/
-DB/
+DB/*
+!DB/init.sql
 Info/
 db-stats-manager/
 .gemini/
