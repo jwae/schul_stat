@@ -191,7 +191,13 @@ function normalizeSchoolSourceRestError(error, hostname = "") {
 function parseOptionalSchoolSourcePort(value) {
   const text = String(value ?? "").trim();
   if (!text) return 3306;
-  return toPositiveInt(text, "Port");
+  const parsed = Number(text);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    const error = new Error("Port ist ungueltig.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return parsed;
 }
 
 function isDevelopmentMode() {
