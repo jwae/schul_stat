@@ -11,8 +11,22 @@ let svwsConnectionModulePromise = null;
 
 async function loadSvwsConnectionModule() {
   if (!svwsConnectionModulePromise) {
-    const moduleUrl = pathToFileURL(path.resolve(__dirname, "..", "lib", "svwsConnection.js")).href;
-    svwsConnectionModulePromise = import(moduleUrl).catch((error) => {
+    const candidates = [
+      path.resolve(__dirname, "..", "lib", "svwsConnection.js"),
+      path.resolve(__dirname, "lib", "svwsConnection.mjs"),
+    ];
+    svwsConnectionModulePromise = (async () => {
+      let lastError = null;
+      for (const candidate of candidates) {
+        try {
+          const moduleUrl = pathToFileURL(candidate).href;
+          return await import(moduleUrl);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error("svwsConnection-Modul konnte nicht geladen werden.");
+    })().catch((error) => {
       svwsConnectionModulePromise = null;
       throw error;
     });
