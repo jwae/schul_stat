@@ -37,6 +37,17 @@ export function normalisiereSvwsHost(host) {
 
   if (/^https?:\/\//i.test(basis)) {
     const url = new URL(basis);
+    if (url.protocol === "http:") {
+      const lowerHostname = String(url.hostname || "").trim().toLowerCase();
+      const istLokalerHost =
+        lowerHostname === "localhost" ||
+        lowerHostname === "127.0.0.1" ||
+        lowerHostname === "::1" ||
+        lowerHostname === "[::1]";
+      if (!istLokalerHost) {
+        throw createSvwsConnectionError("Fuer entfernte SVWS-Server bitte https://Server:Port verwenden.");
+      }
+    }
     url.hostname = ersetzeLokalenSvwsHostFuerDocker(url.hostname);
     return url.toString().replace(/\/+$/, "");
   }
@@ -139,6 +150,10 @@ export async function pruefeSvwsVerbindung({ host, schule, user, passwort, timeo
 
   try {
     const response = await requestSvws(url, benutzer, kennwort, timeoutMs);
+
+    if (response.statusCode === 401) {
+      throw createSvwsConnectionError("SVWS-Server erreichbar. Anmeldung wurde abgelehnt. Bitte Benutzername und Passwort pruefen.");
+    }
 
     if (response.statusCode === 403) {
       throw createSvwsConnectionError(`SVWS-Server erreichbar. Datenbank '${schema}' ist nicht vorhanden oder Anmeldung abgelehnt. Bitte Datenbankname und Zugangsdaten pruefen.`);
