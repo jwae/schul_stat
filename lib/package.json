@@ -1,0 +1,14 @@
+{
+  "name": "@smedia/lib",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./loadKlassenUndSchueler.js",
+  "exports": {
+    ".": "./loadKlassenUndSchueler.js",
+    "./svwsConnection": "./svwsConnection.js"
+  },
+  "dependencies": {
+    "axios": "^1.16.1"
+  }
+}

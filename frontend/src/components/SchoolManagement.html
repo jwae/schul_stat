@@ -57,19 +57,9 @@
         </label>
 
         <label class="field-block">
-          <span class="field-label">Server</span>
+          <span class="field-label">Server (https://Server:Port)</span>
           <input v-model="schoolSourceForm.db_host" :disabled="managementSaving" />
-        </label>
-
-        <label class="field-block">
-          <span class="field-label">Port</span>
-          <input
-            v-model.number="schoolSourceForm.db_port"
-            type="number"
-            min="1"
-            max="65535"
-            :disabled="managementSaving"
-          />
+          
         </label>
 
         <label class="field-block">
@@ -199,7 +189,6 @@
               <th><button class="school-management-sort" type="button" @click="toggleSort('city')">Ort <span v-if="sortIndicatorBadge('city')" class="school-management-sort-indicator">{{ sortIndicatorBadge("city") }}</span></button></th>
               <th><button class="school-management-sort" type="button" @click="toggleSort('school_form_sf')">SF <span v-if="sortIndicatorBadge('school_form_sf')" class="school-management-sort-indicator">{{ sortIndicatorBadge("school_form_sf") }}</span></button></th>
               <th><button class="school-management-sort" type="button" @click="toggleSort('db_host')">Host <span v-if="sortIndicatorBadge('db_host')" class="school-management-sort-indicator">{{ sortIndicatorBadge("db_host") }}</span></button></th>
-              <th><button class="school-management-sort" type="button" @click="toggleSort('db_port')">Port <span v-if="sortIndicatorBadge('db_port')" class="school-management-sort-indicator">{{ sortIndicatorBadge("db_port") }}</span></button></th>
               <th><button class="school-management-sort" type="button" @click="toggleSort('db_name')">Datenbank <span v-if="sortIndicatorBadge('db_name')" class="school-management-sort-indicator">{{ sortIndicatorBadge("db_name") }}</span></button></th>
               <th><button class="school-management-sort" type="button" @click="toggleSort('db_user')">DB-Benutzer <span v-if="sortIndicatorBadge('db_user')" class="school-management-sort-indicator">{{ sortIndicatorBadge("db_user") }}</span></button></th>
               <th><button class="school-management-sort" type="button" @click="toggleSort('is_active')">Status <span v-if="sortIndicatorBadge('is_active')" class="school-management-sort-indicator">{{ sortIndicatorBadge("is_active") }}</span></button></th>
@@ -220,7 +209,6 @@
               <td>{{ source.city || "-" }}</td>
               <td>{{ source.school_form_sf || "-" }}</td>
               <td>{{ source.db_host }}</td>
-              <td>{{ source.db_port }}</td>
               <td>{{ source.db_name }}</td>
               <td>{{ source.db_user }}</td>
               <td>
@@ -521,7 +509,6 @@
                 <th>SNR</th>
                 <th>Schulname</th>
                 <th>Host</th>
-                <th>Port</th>
                 <th>Datenbank</th>
                 <th>User</th>
                 <th>Vorhanden</th>
@@ -539,7 +526,6 @@
                 <td>{{ row.snr }}</td>
                 <td :title="row.school_name || '-'">{{ formatImportPreviewSchoolName(row.school_name) }}</td>
                 <td>{{ row.db_host || "-" }}</td>
-                <td>{{ row.db_port || "-" }}</td>
                 <td>{{ row.db_name || "-" }}</td>
                 <td>{{ row.db_user || "-" }}</td>
                 <td>
@@ -606,10 +592,10 @@
           <section class="school-management-import-info-card">
             <h4>Schulserver</h4>
             <p>Pflichtspalten:</p>
-            <pre class="school-management-import-info-code">snr;db_host;db_port;db_name;db_user;db_passwd</pre>
-            <p>`db_password_enc` wird ebenfalls akzeptiert.</p>
+            <pre class="school-management-import-info-code">snr;db_host;db_name;db_user;db_passwd</pre>
+            <p>`db_password_enc` wird ebenfalls akzeptiert. `db_port` bleibt als Legacy-Spalte optional.</p>
             <p>Beispiel:</p>
-            <pre class="school-management-import-info-code">123456;server.example.de;3306;svwsdb;svws_user;geheim</pre>
+            <pre class="school-management-import-info-code">123456;https://server.example.de:8443;svwsdb;svws_user;geheim</pre>
           </section>
         </div>
 

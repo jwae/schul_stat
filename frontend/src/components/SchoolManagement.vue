@@ -69,7 +69,13 @@ const helpOverlayItems: string[] = [
   "Hier werden die Schulserver-Quellen fuer den Snapshot-Abruf gepflegt.",
   "Neue Schulen lassen sich oben anlegen, bestehende Eintraege in der Tabelle aendern, aktivieren oder loeschen.",
   "Verbindungen testen prueft alle aktiven Schulen und faerbt danach die Punkte bei Online und DB.",
+  "Im Feld Server wird der komplette SVWS-Zielhost eingetragen, bei Bedarf inklusive Protokoll und Port, z. B. https://svws.example.de:8443.",
 ];
+
+function normalizeSchoolSourcePort(value: unknown): number {
+  const port = Number(value || 3306);
+  return Number.isInteger(port) && port > 0 ? port : 3306;
+}
 
 const availableSchoolsForSource = computed<any[]>(() => {
   const selectedId = String(selectedManagementSchoolSourceId.value || "").trim();
@@ -187,7 +193,7 @@ function buildSchoolSourcePayload(source: any) {
   return {
     snr: String(source?.snr || "").trim(),
     db_host: String(source?.db_host || "").trim(),
-    db_port: Number(source?.db_port || 3306),
+    db_port: normalizeSchoolSourcePort(source?.db_port),
     db_name: String(source?.db_name || "").trim(),
     db_user: String(source?.db_user || "").trim(),
     db_password_enc: String(source?.db_password_enc || "").trim(),
@@ -461,10 +467,7 @@ function selectSchoolForSource(school: any) {
 
 function validateManagementSchoolSourceForm(): string {
   if (!schoolSourceForm.snr) return "Bitte eine Schule auswaehlen.";
-  if (!String(schoolSourceForm.db_host || "").trim()) return "Server ist erforderlich.";
-  if (!Number.isInteger(Number(schoolSourceForm.db_port)) || Number(schoolSourceForm.db_port) <= 0) {
-    return "Port ist ungueltig.";
-  }
+  if (!String(schoolSourceForm.db_host || "").trim()) return "Server (https://Server:Port) ist erforderlich.";
   if (!String(schoolSourceForm.db_name || "").trim()) return "Datenbank ist erforderlich.";
   if (!String(schoolSourceForm.db_user || "").trim()) return "DB-Benutzer ist erforderlich.";
 
@@ -493,7 +496,7 @@ watch(selectedManagementSchoolSourceId, (sourceId) => {
 
   schoolSourceForm.snr = source.snr ? String(source.snr) : "";
   schoolSourceForm.db_host = source.db_host || "";
-  schoolSourceForm.db_port = Number(source.db_port || 3306);
+  schoolSourceForm.db_port = normalizeSchoolSourcePort(source.db_port);
   schoolSourceForm.db_name = source.db_name || "";
   schoolSourceForm.db_user = source.db_user || "";
   schoolSourceForm.db_password_enc = "";
@@ -514,7 +517,7 @@ watch(
 
     schoolSourceForm.snr = source.snr ? String(source.snr) : "";
     schoolSourceForm.db_host = source.db_host || "";
-    schoolSourceForm.db_port = Number(source.db_port || 3306);
+    schoolSourceForm.db_port = normalizeSchoolSourcePort(source.db_port);
     schoolSourceForm.db_name = source.db_name || "";
     schoolSourceForm.db_user = source.db_user || "";
     schoolSourceForm.is_active = !!source.is_active;
@@ -709,7 +712,7 @@ async function confirmDeleteAllManagementSchools() {
 async function testManagementSchoolSource() {
   const draftPayload = {
     db_host: String(schoolSourceForm.db_host || "").trim(),
-    db_port: Number(schoolSourceForm.db_port || 3306),
+    db_port: normalizeSchoolSourcePort(schoolSourceForm.db_port),
     db_name: String(schoolSourceForm.db_name || "").trim(),
     db_user: String(schoolSourceForm.db_user || "").trim(),
     db_password_enc: String(schoolSourceForm.db_password_enc || ""),
@@ -816,7 +819,7 @@ async function handleSchoolImportFileSelected(event: Event) {
         snr,
         school_name: schoolName,
         db_host: hostIdx >= 0 ? cells[hostIdx] || "" : "",
-        db_port: portIdx >= 0 ? cells[portIdx] || "" : "",
+        db_port: portIdx >= 0 ? cells[portIdx] || "" : "3306",
         db_name: nameIdx >= 0 ? cells[nameIdx] || "" : "",
         db_user: userIdx >= 0 ? cells[userIdx] || "" : "",
         db_password_enc: passwordIdx >= 0 ? cells[passwordIdx] || "" : "",
@@ -1082,7 +1085,7 @@ async function toggleManagementSchoolSourceActive(source: any) {
         {
         snr: String(source.snr || "").trim(),
         db_host: source.db_host,
-        db_port: Number(source.db_port || 3306),
+        db_port: normalizeSchoolSourcePort(source.db_port),
         db_name: source.db_name,
         db_user: source.db_user,
         db_password_enc: "",

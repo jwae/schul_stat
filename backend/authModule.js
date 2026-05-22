@@ -5,6 +5,21 @@ const https = require("https");
 const net = require("net");
 const fs = require("fs");
 const path = require("path");
+const { pathToFileURL } = require("url");
+
+let svwsConnectionModulePromise = null;
+
+async function loadSvwsConnectionModule() {
+  if (!svwsConnectionModulePromise) {
+    const moduleUrl = pathToFileURL(path.resolve(__dirname, "..", "lib", "svwsConnection.js")).href;
+    svwsConnectionModulePromise = import(moduleUrl).catch((error) => {
+      svwsConnectionModulePromise = null;
+      throw error;
+    });
+  }
+
+  return await svwsConnectionModulePromise;
+}
 
 function classifyAuthConnectionError(error) {
   const code = String(error?.code || "").trim().toUpperCase();
@@ -171,6 +186,12 @@ function normalizeSchoolSourceRestError(error, hostname = "") {
   }
 
   return message || "REST-Verbindungstest fehlgeschlagen.";
+}
+
+function parseOptionalSchoolSourcePort(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return 3306;
+  return toPositiveInt(text, "Port");
 }
 
 function isDevelopmentMode() {
@@ -1761,6 +1782,26 @@ async function testSchoolSourceConnection(source) {
   };
 }
 
+async function testSchoolSourceDraftWithSvwsConnection(source) {
+  const { pruefeSvwsVerbindung } = await loadSvwsConnectionModule();
+  const result = await pruefeSvwsVerbindung({
+    host: source?.db_host,
+    schule: source?.db_name,
+    user: source?.db_user,
+    passwort: source?.db_password_enc,
+    timeoutMs: 5000,
+  });
+
+  return {
+    status_code: "server_ok_db_ok",
+    server_status: "online",
+    db_status: "online",
+    message: result?.meldung || "SVWS-Verbindung erfolgreich geprueft.",
+    basis_url: String(result?.basisUrl || ""),
+    url: String(result?.url || ""),
+  };
+}
+
 function extractToken(req) {
   const header = String(req.headers.authorization || "").trim();
   if (!header.startsWith("Bearer ")) return "";
@@ -3236,7 +3277,7 @@ function createAuthModule(poolProvider) {
 
       const schoolId = toRequiredText(req.body?.snr, "Schule", 6);
       const dbHost = toRequiredText(req.body?.db_host, "Server", 255);
-      const dbPort = toPositiveInt(req.body?.db_port || 3306, "Port");
+      const dbPort = parseOptionalSchoolSourcePort(req.body?.db_port);
       const dbName = toRequiredText(req.body?.db_name, "Datenbank", 255);
       const dbUser = toRequiredText(req.body?.db_user, "DB-Benutzer", 255);
       const dbPasswordEnc = String(req.body?.db_password_enc || "").slice(0, 4000);
@@ -3511,13 +3552,15 @@ function createAuthModule(poolProvider) {
         const dbUser = String(row.db_user || "").trim();
         const dbPasswordEnc = String(row.db_password_enc || "").trim();
         const dbPortRaw = String(row.db_port || "").trim();
-        const dbPort = Number(dbPortRaw || 0);
+        let dbPort = 3306;
 
-        if (!dbHost || !dbName || !dbUser || !dbPasswordEnc || !dbPortRaw) {
+        if (!dbHost || !dbName || !dbUser || !dbPasswordEnc) {
           invalidRows.push(`Zeile ${row.row_no}: Unvollstaendige Daten fuer ${schoolId}.`);
           continue;
         }
-        if (!Number.isInteger(dbPort) || dbPort <= 0) {
+        try {
+          dbPort = parseOptionalSchoolSourcePort(row.db_port);
+        } catch {
           invalidRows.push(`Zeile ${row.row_no}: Ungueltiger Port fuer ${schoolId}.`);
           continue;
         }
@@ -3669,7 +3712,7 @@ function createAuthModule(poolProvider) {
       const sourceId = toPositiveInt(req.params.sourceId, "Schulserver-Quelle");
       const schoolId = toRequiredText(req.body?.snr, "Schule", 6);
       const dbHost = toRequiredText(req.body?.db_host, "Server", 255);
-      const dbPort = toPositiveInt(req.body?.db_port || 3306, "Port");
+      const dbPort = parseOptionalSchoolSourcePort(req.body?.db_port);
       const dbName = toRequiredText(req.body?.db_name, "Datenbank", 255);
       const dbUser = toRequiredText(req.body?.db_user, "DB-Benutzer", 255);
       const incomingPassword = String(req.body?.db_password_enc || "");
@@ -3827,12 +3870,12 @@ function createAuthModule(poolProvider) {
     try {
       const draftSource = {
         db_host: toRequiredText(req.body?.db_host, "Server", 255),
-        db_port: toPositiveInt(req.body?.db_port || 3306, "Port"),
+        db_port: parseOptionalSchoolSourcePort(req.body?.db_port),
         db_name: toRequiredText(req.body?.db_name, "Datenbank", 255),
         db_user: toRequiredText(req.body?.db_user, "DB-Benutzer", 255),
         db_password_enc: String(req.body?.db_password_enc || ""),
       };
-      const result = await testSchoolSourceConnection(draftSource);
+      const result = await testSchoolSourceDraftWithSvwsConnection(draftSource);
       return res.json({
         success: true,
         status: result.status_code,
