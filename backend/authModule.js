@@ -1822,6 +1822,36 @@ async function testSchoolSourceDraftWithSvwsConnection(source) {
   };
 }
 
+function classifySvwsConnectionFailure(error) {
+  const statusCode = Number(error?.statusCode || 0);
+  const message = String(error?.message || "").trim();
+  const isReachableButRejected =
+    statusCode === 401 ||
+    statusCode === 403 ||
+    message.startsWith("SVWS-Server erreichbar.") ||
+    message.startsWith("SVWS-Endpunkt nicht erreichbar (HTTP ");
+
+  if (isReachableButRejected) {
+    return {
+      status_code: "server_ok_db_fail",
+      server_status: "online",
+      db_status: "offline",
+      message: message || "SVWS-Server erreichbar, aber Zugriff auf die Datenbank fehlgeschlagen.",
+    };
+  }
+
+  return {
+    status_code: "server_fail",
+    server_status: "offline",
+    db_status: "unknown",
+    message: message || "Verbindungstest fehlgeschlagen.",
+  };
+}
+
+async function testStoredSchoolSourceWithSvwsConnection(source) {
+  return await testSchoolSourceDraftWithSvwsConnection(source);
+}
+
 function extractToken(req) {
   const header = String(req.headers.authorization || "").trim();
   if (!header.startsWith("Bearer ")) return "";
@@ -3841,7 +3871,7 @@ function createAuthModule(poolProvider) {
       const sourceId = toPositiveInt(req.params.sourceId, "Schulserver-Quelle");
       const source = await ensureSchoolSourceExists(conn, sourceId);
       sourceHost = String(source?.db_host || "").trim();
-      const result = await testSchoolSourceConnection(source);
+      const result = await testStoredSchoolSourceWithSvwsConnection(source);
 
       await conn.query(
         `
@@ -3863,6 +3893,7 @@ function createAuthModule(poolProvider) {
       });
     } catch (error) {
       const sourceId = Number(req.params.sourceId || 0);
+      const classifiedResult = classifySvwsConnectionFailure(error);
       if (sourceId > 0) {
         await conn.query(
           `
@@ -3870,16 +3901,11 @@ function createAuthModule(poolProvider) {
           SET last_test_at = NOW(), last_test_status = ?
           WHERE source_id = ?
           `,
-          ["server_fail", sourceId],
+          [classifiedResult.status_code, sourceId],
         ).catch(() => {});
       }
-
-      const statusCode = Number(error?.statusCode || 0);
-      if (statusCode >= 400 && statusCode < 600) {
-        return res.status(statusCode).json({ error: error.message || "Verbindungstest fehlgeschlagen." });
-      }
       return res.status(400).json({
-        error: normalizeSchoolSourceRestError(error, sourceHost),
+        error: classifiedResult.message || normalizeSchoolSourceRestError(error, sourceHost),
       });
     } finally {
       conn.release();
@@ -3959,7 +3985,7 @@ function createAuthModule(poolProvider) {
         if (!sourceId) continue;
 
         try {
-          const result = await testSchoolSourceConnection(source);
+          const result = await testStoredSchoolSourceWithSvwsConnection(source);
           await conn.query(
             `
             UPDATE school_source_db
@@ -3975,21 +4001,22 @@ function createAuthModule(poolProvider) {
             db_status: result.db_status,
             status: result.status_code,
           });
-        } catch {
+        } catch (error) {
+          const classifiedResult = classifySvwsConnectionFailure(error);
           await conn.query(
             `
             UPDATE school_source_db
             SET last_test_at = NOW(), last_test_status = ?
             WHERE source_id = ?
             `,
-            ["server_fail", sourceId],
+            [classifiedResult.status_code, sourceId],
           ).catch(() => {});
           failureCount += 1;
           results.push({
             source_id: sourceId,
-            server_status: "offline",
-            db_status: "unknown",
-            status: "server_fail",
+            server_status: classifiedResult.server_status,
+            db_status: classifiedResult.db_status,
+            status: classifiedResult.status_code,
           });
         }
       }
