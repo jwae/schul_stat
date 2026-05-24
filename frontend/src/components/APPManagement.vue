@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import UserSessionCard from "./UserSessionCard.vue";
 import UserManagementPanel from "./UserManagementPanel.vue";
 
 const emit = defineEmits<{
@@ -19,18 +20,6 @@ const props = defineProps<{
 const isAdminUser = computed<boolean>(
   () => String(props.user?.group_name || "").trim().toLowerCase() === "admin",
 );
-const managementUserLabel = computed<string>(() => {
-  const username = String(props.user?.username || "").trim();
-  const groupName = String(props.user?.group_name || "").trim();
-  if (!username) return "";
-  return groupName ? `${username} (${groupName})` : username;
-});
-const connectionLabel = computed<string>(() => {
-  const host = String(props.connectedHost || "").trim();
-  const port = String(props.connectedPort || "").trim();
-  if (!host && !port) return "";
-  return port ? `${host}:${port}` : host;
-});
 </script>
 
 <template src="./APPManagement.html"></template>

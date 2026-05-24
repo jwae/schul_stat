@@ -470,7 +470,7 @@ button:disabled {
 }
 
 .user-management-user-list {
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -496,8 +496,8 @@ button:disabled {
 }
 
 .user-management-user-card strong {
-  font-size: inherit;
-  line-height: inherit;
+  font-size: 13px;
+  line-height: 1.25;
 }
 
 .user-management-user-card p {
@@ -508,7 +508,7 @@ button:disabled {
 
 .user-management-user-card small {
   margin-top: 3px;
-  font-size: inherit;
+  font-size: 11px;
   line-height: 1.3;
 }
 
@@ -620,5 +620,23 @@ button:disabled {
 
   .user-management-tab {
     min-width: 0;
+  }
+}
+
+@media (max-width: 1280px) {
+  .user-management-user-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .user-management-user-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .user-management-user-list {
+    grid-template-columns: 1fr;
   }
 }

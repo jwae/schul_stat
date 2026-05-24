@@ -3,7 +3,7 @@ import { authStore } from "../authStore";
 import { kpiService } from "../services/apiService";
 import { formatSchoolSeriesLabel } from "../utils/formatters";
 import { useGlobalFilters } from "./useGlobalFilters";
-import type { OverviewData, SchoolStudentTrendItem, SchoolGradeTrendItem } from "../types";
+import type { OverviewData, StudentTrendItem, SchoolStudentTrendItem, SchoolGradeTrendItem } from "../types";
 import {
   buildEfChartOption,
   buildEfTrendOption,
@@ -18,6 +18,51 @@ import {
   buildSchoolTrendOption,
   buildSupportChartOption,
 } from "../charts/overview/options";
+
+function sortStudentTrendRows(rows: StudentTrendItem[]): StudentTrendItem[] {
+  const parseTermLabel = (label: string) => {
+    const match = String(label || "").match(/^(\d{4})\.(\d{1,2})$/);
+    return match ? { schoolYear: Number(match[1]), termNo: Number(match[2]) } : null;
+  };
+
+  return [...rows].sort((a, b) => {
+    const parsedA = parseTermLabel(String(a.termLabel || ""));
+    const parsedB = parseTermLabel(String(b.termLabel || ""));
+    if (parsedA && parsedB) {
+      if (parsedA.schoolYear !== parsedB.schoolYear) return parsedA.schoolYear - parsedB.schoolYear;
+      if (parsedA.termNo !== parsedB.termNo) return parsedA.termNo - parsedB.termNo;
+    }
+
+    const termIdA = Number(a.termId || 0);
+    const termIdB = Number(b.termId || 0);
+    if (termIdA && termIdB && termIdA !== termIdB) return termIdA - termIdB;
+
+    return String(a.snapshot_date || "").localeCompare(String(b.snapshot_date || ""), "de", { numeric: true });
+  });
+}
+
+function dedupeStudentTrendRowsLatest(rows: StudentTrendItem[]): StudentTrendItem[] {
+  const sorted = sortStudentTrendRows(rows || []);
+  const byTerm = new Map<string, StudentTrendItem>();
+
+  for (const row of sorted) {
+    const key = String(row.termLabel || row.snapshot_date || "").trim();
+    if (!key) continue;
+    const previous = byTerm.get(key);
+    if (!previous) {
+      byTerm.set(key, row);
+      continue;
+    }
+
+    const prevDate = String(previous.snapshot_date || "").trim();
+    const nextDate = String(row.snapshot_date || "").trim();
+    if (nextDate.localeCompare(prevDate, "de", { numeric: true }) >= 0) {
+      byTerm.set(key, row);
+    }
+  }
+
+  return sortStudentTrendRows([...byTerm.values()]);
+}
 
 export function useOverview() {
   const filters = useGlobalFilters();
@@ -119,6 +164,14 @@ export function useOverview() {
   const nationalityChartOption = computed(() => (overview.value ? buildNationalityChartOption(overview.value) : null));
   const overviewTrendChartOption = computed(() => (overview.value ? buildOverviewTrendOption(overview.value) : null));
   const efTrendChartOption = computed(() => (overview.value ? buildEfTrendOption(overview.value) : null));
+  const efTrendRows = computed(() =>
+    dedupeStudentTrendRowsLatest(overview.value?.studentTrend || []).map((row: StudentTrendItem) => ({
+      termId: Number(row.termId || 0),
+      termLabel: String(row.termLabel || row.snapshot_date || "").trim(),
+      snapshotDate: String(row.snapshot_date || "").trim(),
+      dazStudents: Number(row.ef_students || 0),
+    }))
+  );
   const schoolTrendChartOption = computed(() => (
     overview.value
       ? buildSchoolTrendOption(overview.value, {
@@ -343,6 +396,7 @@ export function useOverview() {
     nationalityChartOption,
     overviewTrendChartOption,
     efTrendChartOption,
+    efTrendRows,
     schoolTrendChartOption,
     cumulativeSchoolTrendChartOption,
     schoolTrendBarChartOption,

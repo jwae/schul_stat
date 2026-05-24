@@ -19,72 +19,9 @@
   justify-items: end;
 }
 
-.app-management-close {
-  min-height: 28px;
-  white-space: nowrap;
-  padding: 3px 8px;
-  border-radius: 10px;
-  box-shadow: none;
-  display: inline-flex;
-  align-items: center;
-  font-size: 13px;
-  background: #fff;
-  color: #111;
-  border: 1px solid #ccc;
-}
-
 .app-management-session {
   min-width: 220px;
   text-align: left;
-}
-
-.header-auth-panel {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 11px;
-  border: 1px solid #dbe4f0;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #f7fbff 0%, #ffffff 100%);
-  box-shadow: 0 10px 24px rgba(20, 63, 120, 0.06);
-}
-
-.header-auth-summary {
-  display: grid;
-  gap: 3px;
-}
-
-.header-auth-topline {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.header-auth-user {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: #1f2f45;
-  line-height: 1.15;
-}
-
-.header-auth-meta {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.header-auth-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 26px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: #eef4ff;
-  color: #35527f;
-  font-size: 11px;
 }
 
 .app-management-eyebrow {

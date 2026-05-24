@@ -1,0 +1,26 @@
+<div class="user-session-card">
+  <div class="user-session-card-summary">
+    <div class="user-session-card-topline">
+      <p class="user-session-card-user">{{ resolvedUserLabel || emptyUserLabel }}</p>
+      <button
+        v-if="actionLabel"
+        class="btn-secondary user-session-card-action"
+        type="button"
+        @click="emit('action')"
+      >
+        {{ actionLabel }}
+      </button>
+    </div>
+
+    <div class="user-session-card-meta">
+      <span v-if="connectionLabel" class="user-session-card-badge">
+        <i class="bi bi-hdd-network"></i>
+        Server {{ connectionLabel }}
+      </span>
+      <span v-if="connectedDatabase" class="user-session-card-badge">
+        <i class="bi bi-database"></i>
+        DB {{ connectedDatabase }}
+      </span>
+    </div>
+  </div>
+</div>

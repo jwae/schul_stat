@@ -1,1 +1,31 @@
 @import "./dashboardShared.css";
+
+.class-strength-export-btn {
+  align-self: end;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 2px solid #c8d3e1;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
+  color: #324760;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.class-strength-export-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffffff 0%, #eef4fb 100%);
+  border-color: #aebfd5;
+}
+
+.class-strength-export-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(50, 71, 96, 0.12);
+}
+
+.class-strength-export-btn:disabled {
+  border-color: #d9e1ec;
+  background: #f5f7fa;
+  color: #93a1b3;
+  opacity: 1;
+}

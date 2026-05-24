@@ -44,6 +44,57 @@ function updateDazUpperThreshold(event: Event) {
   const target = event.target as HTMLInputElement | null;
   emit("update:dazUpperThreshold", Number(target?.value || 0));
 }
+
+function csvValue(value: string | number | null | undefined): string {
+  const normalized = String(value ?? "");
+  if (!/[;"\r\n]/.test(normalized)) return normalized;
+  return `"${normalized.replace(/"/g, "\"\"")}"`;
+}
+
+function downloadCsvExport() {
+  if (!props.dazRowsCount) return;
+
+  const header = [
+    "Ort",
+    "SNR",
+    "Schule",
+    ...props.dazClassCodes.map((classCode) => props.getDazClassHeaderLabel(classCode)),
+    "Summe",
+  ];
+
+  const lines = [
+    header.map(csvValue).join(";"),
+    ...props.schoolsInDazMatrix.map((school) => {
+      const values = [
+        school.city || "-",
+        school.snr,
+        school.name || "-",
+        ...props.dazClassCodes.map((classCode) => props.getDaz(school.snr, classCode)),
+        props.totalDazForSchool(school.snr),
+      ];
+      return values.map(csvValue).join(";");
+    }),
+    [
+      "Summe",
+      "",
+      "",
+      ...props.dazClassCodes.map((classCode) => props.totalDazForClass(classCode)),
+      props.grandTotalDaz,
+    ].map(csvValue).join(";"),
+  ];
+
+  const blob = new Blob([`\uFEFF${lines.join("\r\n")}`], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "daz-export.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 </script>
 
 <template src="./DazDashboard.html"></template>

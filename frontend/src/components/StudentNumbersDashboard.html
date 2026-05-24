@@ -1,6 +1,17 @@
 <section class="card">
   <div class="row">
     <h2>Schuelerzahlen</h2>
+
+    <div class="row-right">
+      <button
+        type="button"
+        class="btn-secondary student-numbers-export-btn"
+        :disabled="!schoolTrendSeriesCount"
+        @click="downloadCsvExport"
+      >
+        CSV-Export
+      </button>
+    </div>
   </div>
 
   <div v-if="!selectedSnapshot" class="hint">
@@ -63,6 +74,16 @@
     <article class="overview-card overview-card-wide2">
       <h3 class="overview-title-light">Entwicklung DAZ-Schueler (EF = 1)</h3>
       <EChartPanel :option="efTrendChartOption" />
+      <div class="student-numbers-chart-export">
+        <button
+          type="button"
+          class="btn-secondary student-numbers-export-btn"
+          :disabled="!efTrendRows.length"
+          @click="downloadDazTrendCsvExport"
+        >
+          CSV-Export DAZ
+        </button>
+      </div>
     </article>
   </div>
 </section>

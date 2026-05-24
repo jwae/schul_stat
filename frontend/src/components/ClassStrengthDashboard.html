@@ -26,6 +26,15 @@
           @input="updateUpperThreshold"
         />
       </label>
+
+      <button
+        type="button"
+        class="btn-secondary class-strength-export-btn"
+        :disabled="!classRowsCount"
+        @click="downloadCsvExport"
+      >
+        CSV-Export
+      </button>
     </div>
   </div>
 

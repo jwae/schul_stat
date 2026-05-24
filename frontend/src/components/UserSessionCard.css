@@ -1,0 +1,80 @@
+.user-session-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid #dbe4f0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f7fbff 0%, #ffffff 100%);
+  box-shadow: 0 10px 24px rgba(20, 63, 120, 0.06);
+}
+
+.user-session-card-summary {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+}
+
+.user-session-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.user-session-card-user {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1f2f45;
+  line-height: 1.15;
+}
+
+.user-session-card-action {
+  margin-left: auto;
+  min-height: 30px;
+  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid #d6deea;
+  background: #f9fbfe;
+  color: #35527f;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+.user-session-card-action:hover:not(:disabled) {
+  border-color: #cfd8e6;
+  background: #f3f7fc;
+}
+
+.user-session-card-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(53, 82, 127, 0.10);
+}
+
+.user-session-card-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.user-session-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #35527f;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+}

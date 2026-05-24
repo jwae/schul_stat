@@ -26,6 +26,15 @@
           @input="updateDazUpperThreshold"
         />
       </label>
+
+      <button
+        type="button"
+        class="btn-secondary daz-export-btn"
+        :disabled="!dazRowsCount"
+        @click="downloadCsvExport"
+      >
+        CSV-Export
+      </button>
     </div>
   </div>
 

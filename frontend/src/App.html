@@ -30,6 +30,17 @@
     />
   </template>
 
+  <template v-else-if="showLoginCredentialsPage && pendingLogin && isPendingAdmin">
+    <LoginCredentialsPage
+      :user="pendingLoginUser"
+      :login-user-label="pendingLoginUserLabel"
+      :connected-host="connectedHost || host"
+      :connected-port="connectedPort || port"
+      :connected-database="connectedDatabase || database"
+      @close="showLoginCredentialsPage = false"
+    />
+  </template>
+
   <template v-else-if="!isAuthenticated">
     <section class="card login-card app-login-card">
       <div class="app-login-header">
@@ -86,6 +97,15 @@
             v-if="pendingLogin && isPendingAdmin"
             class="btn-secondary login-manage-users-btn"
             type="button"
+            @click="showLoginCredentialsPage = true"
+          >
+            Anmeldedaten
+          </button>
+
+          <button
+            v-if="pendingLogin && isPendingAdmin"
+            class="btn-secondary login-manage-users-btn"
+            type="button"
             @click="showAppManagement = true"
           >
             Dashboard-Verwaltung
@@ -114,24 +134,14 @@
         <h1>Dashboard</h1>
         <p>Dashboard-Ansicht nach Login.</p>
       </div>
-      <div class="header-auth-panel">
-        <div class="header-auth-summary">
-          <div class="header-auth-topline">
-            <p class="header-auth-user">User {{ currentUserLabel || "Nutzer" }}</p>
-            <button class="btn-secondary header-auth-logout" type="button" @click="logout">Logout</button>
-          </div>
-          <div class="header-auth-meta">
-            <span class="header-auth-badge">
-              <i class="bi bi-hdd-network"></i>
-              {{ connectedHost || host }}:{{ connectedPort || port }}
-            </span>
-            <span class="header-auth-badge">
-              <i class="bi bi-database"></i>
-              {{ connectedDatabase || database }}
-            </span>
-          </div>
-        </div>
-      </div>
+      <UserSessionCard      
+        :user-label="currentUserLabel"
+        :connected-host="connectedHost || host"
+        :connected-port="connectedPort || port"
+        :connected-database="connectedDatabase || database"
+        action-label="Logout"
+        @action="logout"
+      />
     </header>
 
     <DashboardFiltersPanel
@@ -174,6 +184,7 @@
   <OverviewDashboard
     v-if="view === 'uebersicht'"
     :selected-snapshot="selectedSnapshotForOverview"
+    :overview="overview"
     :total-students-overview="totalStudentsOverview"
     :special-needs-overview="specialNeedsOverview"
     :special-needs-percent-overview="specialNeedsPercentOverview"
@@ -202,6 +213,7 @@
     :school-trend-chart-option="schoolTrendChartOption"
     :cumulative-school-trend-chart-option="cumulativeSchoolTrendChartOption"
     :ef-trend-chart-option="efTrendChartOption"
+    :ef-trend-rows="efTrendRows"
     :school-trend-terms="schoolTrendTerms"
     :school-trend-schools="schoolTrendSchools"
     :get-school-trend-students="getSchoolTrendStudents"

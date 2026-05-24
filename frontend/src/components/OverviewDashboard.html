@@ -1,6 +1,18 @@
 <section class="card">
   <div class="row">
     <h2>Uebersicht</h2>
+
+    <div class="row-right">
+      <button
+        type="button"
+        class="btn-secondary overview-export-btn"
+        :disabled="!overview"
+        title="Laedt ein ZIP mit separaten CSV-Dateien fuer Kennzahlen, Verteilungen und §132c je Jahrgang herunter."
+        @click="downloadCsvBundle"
+      >
+        CSV-Sammelexport
+      </button>
+    </div>
   </div>
 
   <div v-if="!selectedSnapshot" class="hint">

@@ -19,7 +19,9 @@ import { useAuth } from "./composables/useAuth";
 
 import DatabaseConnectPanel from "./components/DatabaseConnectPanel.vue";
 import APPManagement from "./components/APPManagement.vue";
+import LoginCredentialsPage from "./components/LoginCredentialsPage.vue";
 import EChartPanel from "./components/EChartPanel.vue";
+import UserSessionCard from "./components/UserSessionCard.vue";
 import DashboardFiltersPanel from "./components/DashboardFiltersPanel.vue";
 import DashboardTabs from "./components/DashboardTabs.vue";
 import ClassStrengthDashboard from "./components/ClassStrengthDashboard.vue";
@@ -73,7 +75,7 @@ const {
   genderChartOption, gradeChartOption, supportChartOption, efChartOption,
   religionChartOption, educationTrackChartOption, hTrackGradeChartOption, migrationChartOption, nationalityChartOption,
 
-  efTrendChartOption, schoolTrendChartOption, cumulativeSchoolTrendChartOption, schoolTrendBarChartOption,
+  efTrendChartOption, efTrendRows, schoolTrendChartOption, cumulativeSchoolTrendChartOption, schoolTrendBarChartOption,
   schoolTrendTerms, schoolTrendSchools, getSchoolTrendStudents, schoolTrendTermTotal,
   specialNeedsOverview, specialNeedsPercentOverview, efOverview, efPercentOverview,
   migrationOverview, migrationPercentOverview, nationalityOverview, nationalityPercentOverview,
@@ -97,6 +99,7 @@ const {
 // --- State and Computed ---
 const databaseConnectionConfirmed = ref<boolean>(false);
 const showAppManagement = ref<boolean>(false);
+const showLoginCredentialsPage = ref<boolean>(false);
 
 const isDatabaseConfigured = computed<boolean>(() => isDbConfigured.value);
 const showDatabaseConnectStep = computed<boolean>(
@@ -150,6 +153,7 @@ async function initializeDashboard() {
 async function login() {
   await performLogin();
   showAppManagement.value = false;
+  showLoginCredentialsPage.value = false;
 }
 
 async function continueAfterLogin() {
@@ -157,6 +161,7 @@ async function continueAfterLogin() {
   if (nextView) {
     view.value = nextView;
     showAppManagement.value = false;
+    showLoginCredentialsPage.value = false;
     await initializeDashboard();
   }
 }
@@ -169,6 +174,7 @@ async function connectDatabase() {
   resetDashboardData({ includeSchools: true });
   loginPassword.value = testLoginPassword;
   showAppManagement.value = false;
+  showLoginCredentialsPage.value = false;
   databaseConnectionConfirmed.value = false;
   view.value = "uebersicht";
 }
@@ -183,10 +189,12 @@ function backToDatabaseConnect() {
   loginPassword.value = testLoginPassword;
   databaseConnectionConfirmed.value = false;
   showAppManagement.value = false;
+  showLoginCredentialsPage.value = false;
 }
 
 function logoutPendingManagementSession() {
   showAppManagement.value = false;
+  showLoginCredentialsPage.value = false;
   pendingLogin.value = null;
   loginPassword.value = testLoginPassword;
   loginError.value = "";
@@ -196,6 +204,7 @@ async function logout() {
   await performLogout();
   resetDashboardData({ includeSchools: true });
   showAppManagement.value = false;
+  showLoginCredentialsPage.value = false;
   databaseConnectionConfirmed.value = isDatabaseConfigured.value;
 }
 
