@@ -6,6 +6,9 @@ export interface School {
   snr: string;
   name: string;
   city: string;
+  plz?: string;
+  ort?: string;
+  strasse?: string;
 }
 
 export interface Snapshot {

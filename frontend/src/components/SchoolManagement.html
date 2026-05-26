@@ -366,22 +366,21 @@
           </label>
         </div>
 
-        <transition name="feedback-fade" mode="out-in">
-          <div
-            v-if="localFeedbackError"
-            class="feedback-panel feedback-panel-error school-management-modal-feedback"
-          >
-            <p class="error">{{ localFeedbackError }}</p>
-          </div>
-          <div
-            v-else-if="localFeedbackNotice"
-            class="feedback-panel feedback-panel-success school-management-modal-feedback"
-          >
-            <p>{{ localFeedbackNotice }}</p>
-          </div>
-        </transition>
-
         <div class="school-management-modal-list">
+          <transition name="feedback-fade" mode="out-in">
+            <div
+              v-if="localFeedbackError"
+              class="feedback-panel feedback-panel-error school-management-modal-feedback"
+            >
+              <p class="error">{{ localFeedbackError }}</p>
+            </div>
+            <div
+              v-else-if="localFeedbackNotice"
+              class="feedback-panel feedback-panel-success school-management-modal-feedback"
+            >
+              <p>{{ localFeedbackNotice }}</p>
+            </div>
+          </transition>
           <table class="school-management-modal-table">
             <thead>
               <tr>
@@ -398,7 +397,9 @@
                 <th>Zeile</th>
                 <th>SNR</th>
                 <th>Name</th>
+                <th>PLZ</th>
                 <th>Ort</th>
+                <th>Strasse</th>
                 <th>Schulform</th>
                 <th>Vorhanden</th>
               </tr>
@@ -415,7 +416,9 @@
                 <td>{{ row.row_no }}</td>
                 <td>{{ row.snr || "-" }}</td>
                 <td :title="row.name || '-'">{{ row.name || "-" }}</td>
-                <td>{{ row.city || "-" }}</td>
+                <td>{{ row.plz || "-" }}</td>
+                <td>{{ row.ort || row.city || "-" }}</td>
+                <td :title="row.strasse || '-'">{{ row.strasse || "-" }}</td>
                 <td>{{ row.school_form || "-" }}</td>
                 <td>
                   <span class="user-management-state" :class="row.exists ? 'is-active' : 'is-inactive'">
@@ -451,7 +454,8 @@
       <section class="school-management-modal school-management-import-preview-modal" role="dialog" aria-modal="true" aria-label="CSV-Vorschau">
         <div class="school-management-modal-head">
           <div>
-            <h3>CSV-Vorschau (Schulserver-Quellen)</h3>
+            <h3>Zugangsdaten für Schulserver importieren.</h3>
+            <p>Es werden nur Zugangsdaten für schon vorhandene Schulen mit SNr. importiert.</p>
             <p>Die Datei <strong>{{ schoolImportFileName }}</strong> enthaelt {{ schoolImportPreviewData.length }} gueltige Zeile(n).</p>
           </div>
           <button class="btn-secondary" type="button" @click="cancelSchoolImport" :disabled="managementSaving">
@@ -477,22 +481,21 @@
           </label>
         </div>
 
-        <transition name="feedback-fade" mode="out-in">
-          <div
-            v-if="localFeedbackError"
-            class="feedback-panel feedback-panel-error school-management-modal-feedback"
-          >
-            <p class="error">{{ localFeedbackError }}</p>
-          </div>
-          <div
-            v-else-if="localFeedbackNotice"
-            class="feedback-panel feedback-panel-success school-management-modal-feedback"
-          >
-            <p>{{ localFeedbackNotice }}</p>
-          </div>
-        </transition>
-
         <div class="school-management-modal-list">
+          <transition name="feedback-fade" mode="out-in">
+            <div
+              v-if="localFeedbackError"
+              class="feedback-panel feedback-panel-error school-management-modal-feedback"
+            >
+              <p class="error">{{ localFeedbackError }}</p>
+            </div>
+            <div
+              v-else-if="localFeedbackNotice"
+              class="feedback-panel feedback-panel-success school-management-modal-feedback"
+            >
+              <p>{{ localFeedbackNotice }}</p>
+            </div>
+          </transition>
           <table class="school-management-modal-table">
             <thead>
               <tr>
@@ -583,17 +586,19 @@
           <section class="school-management-import-info-card">
             <h4>Schulen</h4>
             <p>Pflichtspalten:</p>
-            <pre class="school-management-import-info-code">SNR;Name;Ort;Schulform</pre>
-            <p>`Ort` kann auch als `city` kommen, `Schulform` auch als `school_form`.</p>
+            <pre class="school-management-import-info-code">SNR;Name;Ort</pre>
+            <p>Optionale Spalten: `PLZ`, `Strasse`, `Schulform`.</p>
+            <p>`Ort` kann auch als `city` kommen, `Schulform` auch als `school_form`, `Strasse` auch als `street`.</p>
             <p>Beispiel:</p>
-            <pre class="school-management-import-info-code">123456;Goethe-Gymnasium;Koeln;GY</pre>
+            <pre class="school-management-import-info-code">SNR;Name;PLZ;Ort;Strasse;Schulform
+123456;Goethe-Gymnasium;50667;Koeln;Domkloster 4;GY</pre>
           </section>
 
           <section class="school-management-import-info-card">
             <h4>Schulserver</h4>
             <p>Pflichtspalten:</p>
             <pre class="school-management-import-info-code">snr;db_host;db_name;db_user;db_passwd</pre>
-            <p>`db_password_enc` wird ebenfalls akzeptiert. `db_port` bleibt als Legacy-Spalte optional.</p>
+            <p>`db_password_enc` wird ebenfalls akzeptiert. Ein eigener `db_port` wird nicht mehr eingelesen.</p>
             <p>Beispiel:</p>
             <pre class="school-management-import-info-code">123456;https://server.example.de:8443;svwsdb;svws_user;geheim</pre>
           </section>

@@ -1369,7 +1369,6 @@ function parseSchoolSourceCsv(csvText) {
   const headerCells = parseDelimitedLine(lines[0], delimiter).map((cell) => normalizeCsvHeaderKey(cell));
   const headerDefinitions = [
     { key: "db_host", aliases: ["db_host", "dbhost", "host"] },
-    { key: "db_port", aliases: ["db_port", "dbport", "port"] },
     { key: "db_name", aliases: ["db_name", "dbname", "datenbank"] },
     { key: "db_user", aliases: ["db_user", "dbuser", "user", "benutzer"] },
     { key: "db_passwd", aliases: ["db_passwd", "db_password_enc", "db_password", "passwort"] },
@@ -1392,7 +1391,6 @@ function parseSchoolSourceCsv(csvText) {
       row_no: rowIndex + 2,
       snr: String(cells[headerIndex.get("snr")] || "").trim(),
       db_host: String(cells[headerIndex.get("db_host")] || "").trim(),
-      db_port: String(cells[headerIndex.get("db_port")] || "").trim(),
       db_name: String(cells[headerIndex.get("db_name")] || "").trim(),
       db_user: String(cells[headerIndex.get("db_user")] || "").trim(),
       db_password_enc: String(cells[headerIndex.get("db_passwd")] || "").trim(),
@@ -1400,7 +1398,6 @@ function parseSchoolSourceCsv(csvText) {
   }).filter((entry) =>
     entry.snr
     || entry.db_host
-    || entry.db_port
     || entry.db_name
     || entry.db_user
     || entry.db_password_enc
@@ -1424,7 +1421,10 @@ function parseSchoolCsv(csvText) {
   const headerCells = parseDelimitedLine(lines[0], delimiter).map((cell) => normalizeCsvHeaderKey(cell));
   const snrIndex = findCsvHeaderIndex(headerCells, ["snr"]);
   const nameIndex = findCsvHeaderIndex(headerCells, ["name"]);
-  const cityIndex = findCsvHeaderIndex(headerCells, ["city", "ort"]);
+  const cityIndex = findCsvHeaderIndex(headerCells, ["city"]);
+  const ortIndex = findCsvHeaderIndex(headerCells, ["ort"]);
+  const plzIndex = findCsvHeaderIndex(headerCells, ["plz", "postleitzahl"]);
+  const strasseIndex = findCsvHeaderIndex(headerCells, ["strasse", "straße", "street"]);
 
   if (snrIndex < 0) {
     const error = new Error("Die CSV-Datei enthaelt nicht die erforderliche Spalte snr.");
@@ -1436,7 +1436,7 @@ function parseSchoolCsv(csvText) {
     error.statusCode = 400;
     throw error;
   }
-  if (cityIndex < 0) {
+  if (cityIndex < 0 && ortIndex < 0) {
     const error = new Error("Die CSV-Datei enthaelt nicht die erforderliche Spalte city oder ort.");
     error.statusCode = 400;
     throw error;
@@ -1446,14 +1446,29 @@ function parseSchoolCsv(csvText) {
 
   return lines.slice(1).map((line, rowIndex) => {
     const cells = parseDelimitedLine(line, delimiter);
+    const city = String(
+      cityIndex >= 0
+        ? cells[cityIndex] || ""
+        : ortIndex >= 0
+          ? cells[ortIndex] || ""
+          : "",
+    ).trim();
+    const ort = String(
+      ortIndex >= 0
+        ? cells[ortIndex] || ""
+        : city,
+    ).trim();
     return {
       row_no: rowIndex + 2,
       snr: String(cells[snrIndex] || "").trim(),
       name: String(cells[nameIndex] || "").trim(),
-      city: String(cells[cityIndex] || "").trim(),
+      city,
+      plz: plzIndex >= 0 ? String(cells[plzIndex] || "").trim() : "",
+      ort,
+      strasse: strasseIndex >= 0 ? String(cells[strasseIndex] || "").trim() : "",
       school_form: formIndex >= 0 ? String(cells[formIndex] || "").trim() : "",
     };
-  }).filter((entry) => entry.snr || entry.name || entry.city);
+  }).filter((entry) => entry.snr || entry.name || entry.city || entry.ort);
 }
 
 function resolveSexId(value) {
@@ -2171,6 +2186,9 @@ function createAuthModule(poolProvider) {
         s.snr,
         s.name,
         s.city,
+        s.plz,
+        s.ort,
+        s.strasse,
         s.school_form_id,
         sf.code AS school_form_code,
         sf.name AS school_form_name
@@ -2184,6 +2202,9 @@ function createAuthModule(poolProvider) {
       snr: String(row.snr || "").trim(),
       name: toNullableText(row.name, 255),
       city: toNullableText(row.city, 100),
+      plz: toNullableText(row.plz, 20),
+      ort: toNullableText(row.ort, 100),
+      strasse: toNullableText(row.strasse, 255),
       school_form_id: row.school_form_id ? Number(row.school_form_id) : null,
       school_form_code: toNullableText(row.school_form_code, 32),
       school_form_name: toNullableText(row.school_form_name, 255),
@@ -3415,6 +3436,7 @@ function createAuthModule(poolProvider) {
       const duplicateSnrs = new Set();
       const seenSnrs = new Set();
       const preparedRows = [];
+      const skippedEntries = [];
 
       for (const row of rows) {
         const schoolId = String(row.snr || "").trim();
@@ -3429,6 +3451,9 @@ function createAuthModule(poolProvider) {
 
         const name = String(row.name || "").trim();
         const city = String(row.city || "").trim();
+        const plz = String(row.plz || "").trim();
+        const ort = String(row.ort || "").trim();
+        const strasse = String(row.strasse || "").trim();
         const schoolForm = String(row.school_form || "").trim();
 
         if (!name || !city) {
@@ -3442,16 +3467,13 @@ function createAuthModule(poolProvider) {
             `
             SELECT school_form_id
             FROM school_form
-            WHERE code = ? OR name = ? OR sf_kurz = ?
+            WHERE code = ? OR name = ? OR sf_kurz = ? OR sf = ?
             LIMIT 1
             `,
-            [schoolForm, schoolForm, schoolForm]
+            [schoolForm, schoolForm, schoolForm, schoolForm]
           );
           if (formRows && formRows.length > 0) {
             schoolFormId = formRows[0].school_form_id;
-          } else {
-            invalidRows.push(`Zeile ${row.row_no}: Schulform "${schoolForm}" wurde nicht in school_form gefunden.`);
-            continue;
           }
         }
 
@@ -3460,7 +3482,11 @@ function createAuthModule(poolProvider) {
           snr: schoolId,
           name,
           city,
+          plz,
+          ort,
+          strasse,
           school_form_id: schoolFormId,
+          school_form_supplied: Boolean(schoolFormId),
         });
       }
 
@@ -3477,7 +3503,7 @@ function createAuthModule(poolProvider) {
       const existingEntries = [];
       for (const row of preparedRows) {
         const [existingRows] = await conn.query(
-          "SELECT snr, name, city, school_form_id FROM school WHERE snr = ? LIMIT 1",
+          "SELECT snr, name, city, plz, ort, strasse, school_form_id FROM school WHERE snr = ? LIMIT 1",
           [row.snr]
         );
         const existing = existingRows?.[0] || null;
@@ -3486,6 +3512,9 @@ function createAuthModule(poolProvider) {
             snr: String(existing.snr || "").trim(),
             name: row.name,
             city: row.city,
+            plz: row.plz,
+            ort: row.ort,
+            strasse: row.strasse,
             school_form_id: existing.school_form_id,
           });
         }
@@ -3513,35 +3542,42 @@ function createAuthModule(poolProvider) {
         );
         const existing = existingRows?.[0] || null;
         if (existing) {
+          const targetSchoolFormId = row.school_form_supplied ? row.school_form_id : existing.school_form_id;
           await conn.query(
             `
             UPDATE school
-            SET name = ?, city = ?, school_form_id = ?
+            SET name = ?, city = ?, plz = ?, ort = ?, strasse = ?, school_form_id = ?
             WHERE snr = ?
             `,
-            [row.name, row.city, row.school_form_id, row.snr]
+            [row.name, row.city, row.plz, row.ort, row.strasse, targetSchoolFormId, row.snr]
           );
           updatedCount += 1;
           updatedEntries.push({
             snr: row.snr,
             name: row.name,
             city: row.city,
+            plz: row.plz,
+            ort: row.ort,
+            strasse: row.strasse,
           });
           continue;
         }
 
         await conn.query(
           `
-          INSERT INTO school (snr, name, city, school_form_id)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO school (snr, name, city, plz, ort, strasse, school_form_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           `,
-          [row.snr, row.name, row.city, row.school_form_id]
+          [row.snr, row.name, row.city, row.plz, row.ort, row.strasse, row.school_form_id]
         );
         createdCount += 1;
         createdEntries.push({
           snr: row.snr,
           name: row.name,
           city: row.city,
+          plz: row.plz,
+          ort: row.ort,
+          strasse: row.strasse,
         });
       }
 
@@ -3601,17 +3637,9 @@ function createAuthModule(poolProvider) {
         const dbName = String(row.db_name || "").trim();
         const dbUser = String(row.db_user || "").trim();
         const dbPasswordEnc = String(row.db_password_enc || "").trim();
-        const dbPortRaw = String(row.db_port || "").trim();
-        let dbPort = 3306;
 
         if (!dbHost || !dbName || !dbUser || !dbPasswordEnc) {
           invalidRows.push(`Zeile ${row.row_no}: Unvollstaendige Daten fuer ${schoolId}.`);
-          continue;
-        }
-        try {
-          dbPort = parseOptionalSchoolSourcePort(row.db_port);
-        } catch {
-          invalidRows.push(`Zeile ${row.row_no}: Ungueltiger Port fuer ${schoolId}.`);
           continue;
         }
 
@@ -3621,7 +3649,11 @@ function createAuthModule(poolProvider) {
         );
         const school = schoolRows?.[0] || null;
         if (!school) {
-          invalidRows.push(`Zeile ${row.row_no}: Schulnummer ${schoolId} ist nicht in school vorhanden.`);
+          skippedEntries.push({
+            row_no: Number(row.row_no || 0),
+            snr: schoolId,
+            reason: "SNR nicht in school gefunden",
+          });
           continue;
         }
 
@@ -3630,7 +3662,6 @@ function createAuthModule(poolProvider) {
           snr: schoolId,
           school_name: String(school.name || "").trim(),
           db_host: dbHost,
-          db_port: dbPort,
           db_name: dbName,
           db_user: dbUser,
           db_password_enc: dbPasswordEnc,
@@ -3655,12 +3686,13 @@ function createAuthModule(poolProvider) {
         );
         const existing = existingRows?.[0] || null;
         if (existing) {
+          const targetPort = Number(existing.db_port || 0) > 0 ? Number(existing.db_port) : 3306;
           existingEntries.push({
             source_id: Number(existing.source_id || 0),
             snr: String(existing.snr || "").trim(),
             school_name: row.school_name,
             db_host: String(existing.db_host || "").trim(),
-            db_port: Number(existing.db_port || 0),
+            db_port: targetPort,
             db_name: String(existing.db_name || "").trim(),
             db_user: String(existing.db_user || "").trim(),
             is_active: Number(existing.is_active || 0),
@@ -3690,20 +3722,21 @@ function createAuthModule(poolProvider) {
         );
         const existing = existingRows?.[0] || null;
         if (existing) {
+          const targetPort = Number(existing.db_port || 0) > 0 ? Number(existing.db_port) : 3306;
           await conn.query(
             `
             UPDATE school_source_db
             SET db_host = ?, db_port = ?, db_name = ?, db_user = ?, db_password_enc = ?, is_active = 1
             WHERE source_id = ?
             `,
-            [row.db_host, row.db_port, row.db_name, row.db_user, row.db_password_enc, Number(existing.source_id || 0)],
+            [row.db_host, targetPort, row.db_name, row.db_user, row.db_password_enc, Number(existing.source_id || 0)],
           );
           updatedCount += 1;
           updatedEntries.push({
             snr: row.snr,
             school_name: row.school_name,
             db_host: row.db_host,
-            db_port: row.db_port,
+            db_port: targetPort,
             db_name: row.db_name,
             db_user: row.db_user,
           });
@@ -3723,14 +3756,14 @@ function createAuthModule(poolProvider) {
           )
           VALUES (?, ?, ?, ?, ?, ?, 1)
           `,
-          [row.snr, row.db_host, row.db_port, row.db_name, row.db_user, row.db_password_enc],
+          [row.snr, row.db_host, 3306, row.db_name, row.db_user, row.db_password_enc],
         );
         createdCount += 1;
         createdEntries.push({
           snr: row.snr,
           school_name: row.school_name,
           db_host: row.db_host,
-          db_port: row.db_port,
+          db_port: 3306,
           db_name: row.db_name,
           db_user: row.db_user,
         });
@@ -3738,14 +3771,16 @@ function createAuthModule(poolProvider) {
 
       await conn.commit();
       const bootstrap = await fetchAdminBootstrap();
-      return res.status(201).json({
-        ...bootstrap,
-        created_count: createdCount,
-        updated_count: updatedCount,
-        imported_count: createdCount + updatedCount,
-        created_entries: createdEntries,
-        updated_entries: updatedEntries,
-      });
+        return res.status(201).json({
+          ...bootstrap,
+          created_count: createdCount,
+          updated_count: updatedCount,
+          imported_count: createdCount + updatedCount,
+          skipped_count: skippedEntries.length,
+          created_entries: createdEntries,
+          updated_entries: updatedEntries,
+          skipped_entries: skippedEntries,
+        });
     } catch (error) {
       await conn.rollback().catch(() => {});
       return adminErrorResponse(res, error, "Der CSV-Import der Schulserver-Quellen ist fehlgeschlagen.");

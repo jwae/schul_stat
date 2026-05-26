@@ -11,7 +11,9 @@ require("dotenv").config();
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || "10mb";
+app.use(express.json({ limit: requestBodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: requestBodyLimit }));
 
 // --- Swagger UI Setup ---
 const swaggerDocument = YAML.load(path.join(__dirname, "openapi.yaml"));
@@ -358,7 +360,7 @@ app.get("/api/meta/schools", async (req, res) => {
 
     const [rows] = await currentPool.query(
       `
-      SELECT DISTINCT s.snr, s.name, s.city
+      SELECT DISTINCT s.snr, s.name, s.city, s.plz, s.ort, s.strasse
       FROM school s
       JOIN snapshot sp ON sp.snr = s.snr
       JOIN term t ON t.term_id = sp.term_id

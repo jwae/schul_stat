@@ -1,0 +1,4 @@
+ALTER TABLE school
+  ADD COLUMN plz varchar(20) DEFAULT NULL AFTER city,
+  ADD COLUMN ort varchar(100) DEFAULT NULL AFTER plz,
+  ADD COLUMN strasse varchar(255) DEFAULT NULL AFTER ort;

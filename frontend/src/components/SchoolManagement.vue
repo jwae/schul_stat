@@ -42,7 +42,7 @@ const schoolImportPreviewModalOpen = ref<boolean>(false);
 const schoolImportPreviewData = ref<any[]>([]);
 const schoolImportRawCsv = ref<string>("");
 const schoolImportFileName = ref<string>("");
-const schoolImportOverwriteExisting = ref<boolean>(false);
+const schoolImportOverwriteExisting = ref<boolean>(true);
 const schoolTableImportPreviewModalOpen = ref<boolean>(false);
 const schoolTableImportPreviewData = ref<any[]>([]);
 const schoolTableImportFileName = ref<string>("");
@@ -193,7 +193,7 @@ function buildSchoolSourcePayload(source: any) {
   return {
     snr: String(source?.snr || "").trim(),
     db_host: String(source?.db_host || "").trim(),
-    db_port: normalizeSchoolSourcePort(source?.db_port),
+    db_port: normalizeSchoolSourcePort(source?.db_port ?? 3306),
     db_name: String(source?.db_name || "").trim(),
     db_user: String(source?.db_user || "").trim(),
     db_password_enc: String(source?.db_password_enc || "").trim(),
@@ -801,7 +801,6 @@ async function handleSchoolImportFileSelected(event: Event) {
     const { lines, headers, parseLine } = parseCsvRows(csvText);
     const snrIdx = findCsvHeaderIndex(headers, ["snr"]);
     const hostIdx = findCsvHeaderIndex(headers, ["db_host", "dbhost", "host"]);
-    const portIdx = findCsvHeaderIndex(headers, ["db_port", "dbport", "port"]);
     const nameIdx = findCsvHeaderIndex(headers, ["db_name", "dbname", "datenbank"]);
     const userIdx = findCsvHeaderIndex(headers, ["db_user", "dbuser", "user", "benutzer"]);
     const passwordIdx = findCsvHeaderIndex(headers, ["db_passwd", "db_password_enc", "db_password", "passwort"]);
@@ -819,7 +818,6 @@ async function handleSchoolImportFileSelected(event: Event) {
         snr,
         school_name: schoolName,
         db_host: hostIdx >= 0 ? cells[hostIdx] || "" : "",
-        db_port: portIdx >= 0 ? cells[portIdx] || "" : "3306",
         db_name: nameIdx >= 0 ? cells[nameIdx] || "" : "",
         db_user: userIdx >= 0 ? cells[userIdx] || "" : "",
         db_password_enc: passwordIdx >= 0 ? cells[passwordIdx] || "" : "",
@@ -830,6 +828,7 @@ async function handleSchoolImportFileSelected(event: Event) {
 
     if (!schoolImportPreviewData.value.length) throw new Error("Keine importierbaren Zeilen gefunden.");
 
+    schoolImportOverwriteExisting.value = true;
     schoolImportPreviewModalOpen.value = true;
   } catch (e: any) {
     emitFeedback(e?.message || "Fehler beim Lesen der CSV-Datei.", "");
@@ -850,25 +849,33 @@ async function handleSchoolTableImportFileSelected(event: Event) {
     const { lines, headers, parseLine } = parseCsvRows(csvText);
     const snrIdx = findCsvHeaderIndex(headers, ["snr"]);
     const nameIdx = findCsvHeaderIndex(headers, ["name"]);
-    const cityIdx = findCsvHeaderIndex(headers, ["ort", "city"]);
+    const cityIdx = findCsvHeaderIndex(headers, ["city"]);
+    const ortIdx = findCsvHeaderIndex(headers, ["ort"]);
+    const plzIdx = findCsvHeaderIndex(headers, ["plz", "postleitzahl"]);
+    const strasseIdx = findCsvHeaderIndex(headers, ["strasse", "straße", "street"]);
     const schoolFormIdx = findCsvHeaderIndex(headers, ["schulform", "school_form"]);
 
-    if (snrIdx < 0 || nameIdx < 0 || cityIdx < 0 || schoolFormIdx < 0) {
-      throw new Error("Die CSV-Datei muss die Spalten 'SNR', 'Name', 'Ort/city' und 'schulform/school_form' enthalten.");
+    if (snrIdx < 0 || nameIdx < 0 || (cityIdx < 0 && ortIdx < 0)) {
+      throw new Error("Die CSV-Datei muss die Spalten 'SNR', 'Name' und 'Ort/city' enthalten.");
     }
 
     schoolTableImportPreviewData.value = lines.slice(1).map((line, index) => {
       const cells = parseLine(line);
+      const city = cityIdx >= 0 ? cells[cityIdx] || "" : ortIdx >= 0 ? cells[ortIdx] || "" : "";
+      const ort = ortIdx >= 0 ? cells[ortIdx] || "" : city;
       return {
         row_no: index + 2,
         snr: cells[snrIdx] || "",
         name: cells[nameIdx] || "",
-        city: cells[cityIdx] || "",
-        school_form: cells[schoolFormIdx] || "",
+        city,
+        plz: plzIdx >= 0 ? cells[plzIdx] || "" : "",
+        ort,
+        strasse: strasseIdx >= 0 ? cells[strasseIdx] || "" : "",
+        school_form: schoolFormIdx >= 0 ? cells[schoolFormIdx] || "" : "",
         exists: props.managementSchools.some((school) => String(school?.snr || "").trim() === String(cells[snrIdx] || "").trim()),
         selected: true,
       };
-    }).filter((row) => row.snr || row.name || row.city || row.school_form);
+    }).filter((row) => row.snr || row.name || row.city || row.ort);
 
     if (!schoolTableImportPreviewData.value.length) {
       throw new Error("Keine importierbaren Zeilen gefunden.");
@@ -990,7 +997,7 @@ function cancelSchoolImport() {
   schoolImportPreviewData.value = [];
   schoolImportRawCsv.value = "";
   schoolImportFileName.value = "";
-  schoolImportOverwriteExisting.value = false;
+  schoolImportOverwriteExisting.value = true;
 }
 
 function selectAllSchoolImportRows() {
@@ -1016,15 +1023,29 @@ async function confirmSchoolImport() {
     if (!rowsForImport.length) {
       throw new Error("Mit deaktiviertem Ueberschreiben koennen nur neue ausgewaehlte Schulen importiert werden.");
     }
+    const skippedEntries = rowsForImport.filter((row) => !String(row?.school_name || "").trim());
+    const importableRows = rowsForImport.filter((row) => String(row?.school_name || "").trim());
+    if (!importableRows.length) {
+      const skippedList = skippedEntries
+        .map((row) => `Zeile ${Number(row?.row_no || 0)}: Schulnummer ${String(row?.snr || "").trim() || "-" } wurde in school nicht gefunden und uebersprungen.`)
+        .join("\n");
+      openImportResultDialog("CSV-Import (Schulserver) abgeschlossen", skippedList || "Keine importierbaren Schulserver-Zeilen gefunden.");
+      emitFeedback("", `${skippedEntries.length} Zeile(n) wurden uebersprungen, weil die SNR in school nicht vorhanden ist.`);
+      schoolImportPreviewModalOpen.value = false;
+      return;
+    }
     const createdEntries: any[] = [];
     const updatedEntries: any[] = [];
     let lastResponse: any = null;
 
-    for (const row of rowsForImport) {
-      const payload = buildSchoolSourcePayload(row);
+    for (const row of importableRows) {
       const existingSource = props.managementSchoolSources.find(
-        (source) => String(source?.snr || "").trim() === payload.snr,
+        (source) => String(source?.snr || "").trim() === String(row?.snr || "").trim(),
       );
+      const payload = buildSchoolSourcePayload({
+        ...row,
+        db_port: existingSource?.db_port ?? 3306,
+      });
       lastResponse = await persistSchoolSource(payload, existingSource?.source_id || null);
       if (existingSource?.source_id) {
         updatedEntries.push(payload);
@@ -1045,6 +1066,9 @@ async function confirmSchoolImport() {
       `Neu angelegt: ${createdEntries.length}`,
       `Aktualisiert: ${updatedEntries.length}`,
     ];
+    if (skippedEntries.length) {
+      resultLines.push(`Uebersprungen: ${skippedEntries.length}`);
+    }
     if (createdEntries.length) {
       resultLines.push("");
       resultLines.push("Neu angelegt:");
@@ -1059,8 +1083,18 @@ async function confirmSchoolImport() {
         resultLines.push(`${String(entry?.snr || "").trim()} | ${String(entry?.db_host || "").trim()} | ${String(entry?.db_name || "").trim()}`);
       }
     }
+    if (skippedEntries.length) {
+      resultLines.push("");
+      resultLines.push("Uebersprungen:");
+      for (const row of skippedEntries) {
+        resultLines.push(`Zeile ${Number(row?.row_no || 0)} | ${String(row?.snr || "").trim() || "-"} | SNR nicht in school gefunden`);
+      }
+    }
     openImportResultDialog("CSV-Import (Schulserver) abgeschlossen", resultLines.join("\n"));
-    emitFeedback("", `${createdEntries.length + updatedEntries.length} Schulserver-Quelle(n) importiert. Neu: ${createdEntries.length}, aktualisiert: ${updatedEntries.length}.`);
+    emitFeedback(
+      "",
+      `${createdEntries.length + updatedEntries.length} Schulserver-Quelle(n) importiert. Neu: ${createdEntries.length}, aktualisiert: ${updatedEntries.length}.${skippedEntries.length ? ` Uebersprungen: ${skippedEntries.length}.` : ""}`,
+    );
   } catch (e: any) {
     emitFeedback(e?.response?.data?.error || e?.message || "Der CSV-Import der Schulserver-Quellen ist fehlgeschlagen.", "");
   } finally {
@@ -1068,7 +1102,7 @@ async function confirmSchoolImport() {
     schoolImportRawCsv.value = "";
     schoolImportFileName.value = "";
     if (!schoolImportPreviewModalOpen.value) {
-      schoolImportOverwriteExisting.value = false;
+      schoolImportOverwriteExisting.value = true;
     }
   }
 }
