@@ -24,6 +24,7 @@ db-stats-manager/
 .gemini/
 db-stats-manager.skill
 GEMINI.md
+AGENTS.md
 backend/.env
 *.log
 ~$*

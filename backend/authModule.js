@@ -142,11 +142,83 @@ function normalizeSchoolSourceHost(rawValue) {
   }
 }
 
+function resolveSchoolSourceRestEndpoint(rawValue, defaultPort = 8443) {
+  const text = String(rawValue || "").trim();
+  if (!text) {
+    const error = new Error("Server ist erforderlich.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let hostname = "";
+  let port = 0;
+
+  if (/^https?:\/\//i.test(text)) {
+    let parsed;
+    try {
+      parsed = new URL(text);
+    } catch {
+      const error = new Error("Server ist ungueltig.");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (parsed.protocol !== "https:") {
+      const error = new Error("Es sind nur HTTPS-Adressen erlaubt.");
+      error.statusCode = 400;
+      throw error;
+    }
+    if ((parsed.pathname && parsed.pathname !== "/") || parsed.search || parsed.hash) {
+      const error = new Error("Bitte nur den Hostnamen ohne Pfad angeben.");
+      error.statusCode = 400;
+      throw error;
+    }
+    hostname = String(parsed.hostname || "").trim();
+    port = Number(parsed.port || 0);
+  } else if (/[/?#]/.test(text)) {
+    const error = new Error("Bitte nur den Hostnamen ohne Pfad angeben.");
+    error.statusCode = 400;
+    throw error;
+  } else {
+    const normalized = text.replace(/\/+$/, "");
+    const ipv6Match = normalized.match(/^\[([^\]]+)\](?::(\d+))?$/);
+    if (ipv6Match) {
+      hostname = String(ipv6Match[1] || "").trim();
+      port = Number(ipv6Match[2] || 0);
+    } else {
+      const hostPortMatch = normalized.match(/^([^:]+):(\d+)$/);
+      if (hostPortMatch) {
+        hostname = String(hostPortMatch[1] || "").trim();
+        port = Number(hostPortMatch[2] || 0);
+      } else {
+        hostname = normalized;
+      }
+    }
+  }
+
+  if (!hostname) {
+    const error = new Error("Server ist ungueltig.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (port && (!Number.isInteger(port) || port <= 0)) {
+    const error = new Error("Port ist ungueltig.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    hostname,
+    port: port || defaultPort,
+  };
+}
+
 function normalizeSchoolSourceRestError(error, hostname = "") {
   const code = String(error?.code || error?.cause?.code || "").trim().toUpperCase();
   const message = String(error?.message || error?.cause?.message || "").trim();
   const lowered = message.toLowerCase();
   const requestPath = String(error?.requestPath || error?.cause?.requestPath || "").trim();
+  const requestPort = Number(error?.requestPort || error?.cause?.requestPort || 0);
 
   if (
     code === "ERR_TLS_CERT_ALTNAME_INVALID" ||
@@ -184,7 +256,7 @@ function normalizeSchoolSourceRestError(error, hostname = "") {
     lowered.includes("timeout") ||
     lowered.includes("econnrefused")
   ) {
-    return "HTTPS-Endpunkt auf Port 8443 ist nicht erreichbar.";
+    return `HTTPS-Endpunkt auf Port ${requestPort || 8443} ist nicht erreichbar.`;
   }
 
   if (Number(error?.responseStatus || 0) === 404) {
@@ -223,13 +295,14 @@ function isLocalDevelopmentHost(hostname) {
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
-function buildSchoolSourceRestUrl(hostname, pathname) {
+function buildSchoolSourceRestUrl(hostname, pathname, options = {}) {
   const normalizedHost = String(hostname || "").trim();
   const normalizedPath = String(pathname || "").trim();
   const isLocalHost = isLocalDevelopmentHost(normalizedHost);
+  const requestedPort = Number(options?.port || 0);
   const base = isLocalHost && isDevelopmentMode()
-    ? `https://${normalizedHost}`
-    : `https://${normalizedHost}:8443`;
+    ? `https://${normalizedHost}${requestedPort > 0 ? `:${requestedPort}` : ""}`
+    : `https://${normalizedHost}:${requestedPort > 0 ? requestedPort : 8443}`;
   return new URL(normalizedPath, `${base}/`);
 }
 
@@ -244,9 +317,10 @@ function buildSchoolSourceRestHeaders(username = "", password = "") {
 }
 
 async function fetchSchoolSourceRestJson(hostname, pathname, options = {}) {
-  const url = buildSchoolSourceRestUrl(hostname, pathname);
+  const url = buildSchoolSourceRestUrl(hostname, pathname, options);
   const allowSelfSigned = isDevelopmentMode() && isLocalDevelopmentHost(hostname);
   const headers = buildSchoolSourceRestHeaders(options.username, options.password);
+  const requestPort = Number(url.port || (url.protocol === "https:" ? 443 : 80));
 
   return await new Promise((resolve, reject) => {
     const req = https.request(url, {
@@ -268,6 +342,7 @@ async function fetchSchoolSourceRestJson(hostname, pathname, options = {}) {
           const error = new Error(`HTTP ${statusCode}`);
           error.responseStatus = statusCode;
           error.requestPath = String(pathname || "").trim();
+          error.requestPort = requestPort;
           reject(error);
           return;
         }
@@ -277,6 +352,7 @@ async function fetchSchoolSourceRestJson(hostname, pathname, options = {}) {
         } catch {
           const error = new Error("REST-Endpunkt liefert kein gueltiges JSON.");
           error.requestPath = String(pathname || "").trim();
+          error.requestPort = requestPort;
           reject(error);
         }
       });
@@ -287,11 +363,13 @@ async function fetchSchoolSourceRestJson(hostname, pathname, options = {}) {
       const error = new Error("Zeitueberschreitung beim REST-Verbindungstest.");
       error.code = "ETIMEDOUT";
       error.requestPath = String(pathname || "").trim();
+      error.requestPort = requestPort;
       reject(error);
     });
 
     req.on("error", (error) => {
       error.requestPath = String(pathname || "").trim();
+      error.requestPort = requestPort;
       reject(error);
     });
 
@@ -5264,7 +5342,9 @@ function createAuthModule(poolProvider) {
           const deletedStudentsForSource = Number(deleteResult?.affectedRows || 0);
           deletedRows += deletedStudentsForSource;
 
-          const hostname = normalizeSchoolSourceHost(row?.db_host).hostname;
+          const restEndpoint = resolveSchoolSourceRestEndpoint(row?.db_host, 443);
+          const hostname = restEndpoint.hostname;
+          const restPort = restEndpoint.port;
           const databaseName = toRequiredText(row?.db_name, "Datenbank", 255);
           const { username, password } = ensureSchoolSourceRestCredentials(row, schoolLabel);
           const encodedDbName = encodeURIComponent(databaseName);
@@ -5278,17 +5358,17 @@ function createAuthModule(poolProvider) {
                 fetchJson(
                   hostname,
                   `/db/${encodedDbName}/schule/religionen`,
-                  { username, password },
+                  { username, password, port: restPort },
                 ),
                 fetchJson(
                   hostname,
                   `/db/${encodedDbName}/foerderschwerpunkte`,
-                  { username, password },
+                  { username, password, port: restPort },
                 ),
                 fetchJson(
                   hostname,
                   `/db/${encodedDbName}/jahrgaenge/jahrgangsdaten`,
-                  { username, password },
+                  { username, password, port: restPort },
                 ),
               ]),
               (durationMs) => {
@@ -5311,7 +5391,7 @@ function createAuthModule(poolProvider) {
             () => fetchJson(
               hostname,
               `/db/${encodedDbName}/schule/stammdaten`,
-              { username, password },
+              { username, password, port: restPort },
             ),
             (durationMs) => {
               sourceFetchDurationMs += durationMs;
@@ -5340,11 +5420,11 @@ function createAuthModule(poolProvider) {
           const sourceStatusCounts = new Map();
 
           const selectionPayload = await measureFetchWindow(
-            () => fetchJson(
-              hostname,
-              `/db/${encodedDbName}/schueler/abschnitt/${encodeURIComponent(String(externalSectionId))}/auswahlliste`,
-              { username, password },
-            ),
+              () => fetchJson(
+                hostname,
+                `/db/${encodedDbName}/schueler/abschnitt/${encodeURIComponent(String(externalSectionId))}/auswahlliste`,
+                { username, password, port: restPort },
+              ),
             (durationMs) => {
               sourceFetchDurationMs += durationMs;
             },
@@ -5413,12 +5493,12 @@ function createAuthModule(poolProvider) {
                   fetchJson(
                     hostname,
                     `/db/${encodedDbName}/schueler/${encodeURIComponent(studentId)}/stammdaten`,
-                    { username, password },
+                    { username, password, port: restPort },
                   ),
                   fetchJson(
                     hostname,
                     `/db/${encodedDbName}/schueler/${encodeURIComponent(studentId)}/abschnitt/${encodeURIComponent(String(externalSectionId))}/lernabschnittsdaten`,
-                    { username, password },
+                    { username, password, port: restPort },
                   ),
                 ]);
               } catch (error) {
